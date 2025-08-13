@@ -1,0 +1,59 @@
+name: Deploy Infra and Grafana
+
+on:
+  push:
+    branches:
+      - main
+
+jobs:
+  deploy-infra:
+    runs-on: ubuntu-latest
+    permissions:
+      id-token: write # Necessário para a autenticação OIDC com a AWS
+      contents: read
+      
+    steps:
+      - name: Checkout Repository
+        uses: actions/checkout@v3
+
+      # === AUTENTICAÇÃO NA AWS USANDO OIDC ===
+      - name: Configure AWS Credentials
+        uses: aws-actions/configure-aws-credentials@v1
+        with:
+          aws-region: us-east-1
+          role-to-assume: arn:aws:iam::427547500346:role/GitHubActionsRole
+
+      # === ETAPA 1: TERRAFORM ===
+      - name: Setup Terraform
+        uses: hashicorp/setup-terraform@v2
+        with:
+          terraform_version: 0.14.9
+
+      - name: Terraform Init
+        run: terraform init
+        working-directory: ./compute
+
+      - name: Terraform Apply
+        id: apply
+        run: terraform apply -auto-approve
+        working-directory: ./compute
+
+      # === ETAPA 2: ANSIBLE ===
+      - name: Setup Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: '3.x'
+
+      - name: Install Ansible
+        run: pip install ansible
+
+      - name: Set Inventory Script as Executable
+        run: chmod +x inventory.sh
+        working-directory: ./automation
+
+      - name: Run Ansible Playbook
+        run: |
+          echo "$ANSIBLE_VAULT_PASS" | ansible-playbook -i inventory.sh playbook.yml --vault-password-file -
+        working-directory: ./automation
+        env:
+          ANSIBLE_VAULT_PASS: ${{ secrets.ANSIBLE_VAULT_PASS }}
