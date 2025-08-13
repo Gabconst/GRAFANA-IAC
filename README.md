@@ -22,7 +22,7 @@ A estrutura do seu projeto é organizada para separar as responsabilidades:
       * `variables.tf`: Declara todas as variáveis de entrada do Terraform, como `ami_id` e `instance_type`, sem valores padrão.
       * `terraform.tfvars`: **Este arquivo define os valores de todas as variáveis** declaradas em `variables.tf`. É aqui que você configura a AMI, o tipo de instância, etc. Este arquivo deve ser ignorado pelo Git.
       * `outputs.tf`: Expõe o IP público da instância, que é o ponto de conexão entre o Terraform e o Ansible.
-      * `devops-pdi.pem`: Sua chave SSH privada.
+      * `sua-chave.pem`: Sua chave SSH privada.
 
   * **`automation/` (Código do Ansible)**
 
