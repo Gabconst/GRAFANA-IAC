@@ -47,12 +47,12 @@ jobs:
       - name: Create Dynamic Inventory
         id: create-inventory
         run: |
-          # Captura somente o IP puro do Terraform, sem logs extras
-          TF_STATE_IP=$(terraform -chdir=./compute output -raw instance_ip 2>/dev/null | tr -d '\r\n' | grep -Eo '([0-9]{1,3}\.){3}[0-9]{1,3}')
+          # Captura apenas o IP puro do Terraform, sem eco extra e sem quebra de linha
+          TF_STATE_IP=$(terraform -chdir=./compute output -raw instance_ip 2>/dev/null | tr -d '\r\n' | head -n1)
           
           echo "📌 IP capturado: $TF_STATE_IP"
           
-          # Gera inventário no formato correto para o Ansible
+          # Cria inventário Ansible no formato correto
           cat > ./automation/inventory.json <<EOF
           {
             "grafana-servers": {
@@ -69,19 +69,16 @@ jobs:
 
           echo "✅ Inventory.json gerado:"
           cat ./automation/inventory.json
-        working-directory: ./
 
-      - name: Validate Ansible Inventory
+      - name: Validate Inventory
         run: |
           echo "🔍 Validando inventário..."
           ansible-inventory -i ./automation/inventory.json --list
-        working-directory: ./
 
       - name: Run Ansible Playbook
         run: |
           echo "${{ secrets.ANSIBLE_VAULT_PASS }}" > vault-password.txt
           ansible-playbook -i ./automation/inventory.json ./automation/playbook.yml --vault-password-file vault-password.txt
           rm vault-password.txt
-        working-directory: ./
         env:
           ANSIBLE_VAULT_PASS: ${{ secrets.ANSIBLE_VAULT_PASS }}
