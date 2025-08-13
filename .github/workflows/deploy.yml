@@ -53,7 +53,14 @@ jobs:
 
       - name: Run Ansible Playbook
         run: |
-          echo "$ANSIBLE_VAULT_PASS" | ansible-playbook -i inventory.sh playbook.yml --vault-password-file -
+          # Cria um arquivo temporário com a senha do Vault
+          echo "${{ secrets.ANSIBLE_VAULT_PASS }}" > vault-password.txt
+          
+          # Executa o Ansible, apontando para o arquivo de senha
+          ansible-playbook -i inventory.sh playbook.yml --vault-password-file vault-password.txt
+          
+          # Remove o arquivo temporário por segurança
+          rm vault-password.txt
         working-directory: ./automation
         env:
           ANSIBLE_VAULT_PASS: ${{ secrets.ANSIBLE_VAULT_PASS }}
