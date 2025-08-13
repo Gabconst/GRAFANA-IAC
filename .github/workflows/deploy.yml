@@ -48,12 +48,13 @@ jobs:
         id: create-inventory
         run: |
           TF_STATE_IP=$(terraform -chdir=./compute output -raw instance_ip)
-          
-          cat <<EOF > ./automation/inventory.json
+          TF_STATE_IP=$(echo "$TF_STATE_IP" | tr -d '\r\n')  # remove quebras de linha
+
+          cat > ./automation/inventory.json <<EOF
           {
             "grafana-servers": {
               "hosts": {
-                "${TF_STATE_IP}": {}
+                "$TF_STATE_IP": {}
               },
               "vars": {
                 "ansible_user": "ubuntu",
@@ -62,6 +63,14 @@ jobs:
             }
           }
           EOF
+
+          echo "✅ Inventory.json gerado:"
+          cat ./automation/inventory.json
+        working-directory: ./
+
+      - name: Validate Ansible Inventory
+        run: |
+          ansible-inventory -i ./automation/inventory.json --list
         working-directory: ./
 
       - name: Run Ansible Playbook
