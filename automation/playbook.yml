@@ -1,9 +1,8 @@
 - name: Configurar e instalar Grafana
   hosts: grafana-servers
   become: yes
-  vars:
-    grafana_admin_password: "Devops@39"
-    grafana_http_addr: "0.0.0.0"
+  vars_files:
+    - group_vars/grafana-servers.yml
 
   tasks:
     - name: Parar o serviço do Grafana (se estiver rodando) para evitar conflitos
