@@ -1,5 +1,6 @@
-cat > automation/inventory.sh << 'EOF'
 #!/bin/bash
+
+# Este script lê o IP público da instância criada pelo Terraform.
 
 if [ ! -f ../compute/terraform.tfstate ]; then
   echo "Terraform state file not found."
@@ -21,4 +22,3 @@ cat <<END_OF_JSON
   }
 }
 END_OF_JSON
-EOF
