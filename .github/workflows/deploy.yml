@@ -28,13 +28,13 @@ jobs:
           terraform_version: 0.14.9
 
       - name: Terraform Init
-        run: terraform init
         working-directory: ./compute
+        run: terraform init
 
       - name: Terraform Apply
         id: apply
-        run: terraform apply -auto-approve
         working-directory: ./compute
+        run: terraform apply -auto-approve
 
       - name: Setup Python
         uses: actions/setup-python@v4
@@ -45,17 +45,19 @@ jobs:
         run: pip install ansible
 
       - name: Get Terraform Output
-        id: tf-output
+        working-directory: ./compute
         run: |
-          terraform -chdir=./compute output -raw instance_ip > instance_ip.txt
-          IP=$(head -n1 instance_ip.txt | tr -d '\r\n')
-          echo "📌 IP capturado: $IP"
-          echo "IP=$IP" >> $GITHUB_ENV
+          # Gera arquivo com o IP no diretório raiz
+          terraform output -raw instance_ip > ../instance_ip.txt
+          echo "📌 Terraform output gerado em instance_ip.txt"
 
       - name: Create Dynamic Inventory
         run: |
-          TF_STATE_IP=${{ env.IP }}
+          # Lê o IP puro do arquivo e remove quebras de linha
+          TF_STATE_IP=$(head -n1 instance_ip.txt | tr -d '\r\n')
+          echo "📌 IP capturado: $TF_STATE_IP"
 
+          # Gera inventário JSON válido para Ansible
           cat > ./automation/inventory.json <<EOF
           {
             "grafana-servers": {
