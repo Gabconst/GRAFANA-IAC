@@ -1,0 +1,74 @@
+- name: Configurar e instalar Grafana
+  hosts: grafana-servers
+  become: yes
+  vars:
+    grafana_admin_password: "Devops@39"
+    grafana_http_addr: "0.0.0.0"
+
+  tasks:
+    - name: Parar o serviço do Grafana (se estiver rodando) para evitar conflitos
+      systemd:
+        name: grafana-server
+        state: stopped
+      ignore_errors: yes
+
+    - name: Instalar dependências necessárias e atualizar pacotes
+      apt:
+        name:
+          - apt-transport-https
+          - software-properties-common
+          - gnupg2
+          - curl
+        state: present
+        update_cache: yes
+        
+    - name: Adicionar chave GPG oficial do Grafana
+      apt_key:
+        url: https://apt.grafana.com/gpg.key
+        state: present
+
+    - name: Adicionar repositório oficial do Grafana
+      apt_repository:
+        repo: "deb https://apt.grafana.com stable main"
+        state: present
+        filename: grafana.list
+      
+    - name: Instalar o Grafana
+      apt:
+        name: grafana
+        state: latest
+        update_cache: yes
+
+    - name: Configurar Grafana para aceitar conexões externas
+      lineinfile:
+        path: /etc/grafana/grafana.ini
+        regexp: '^;http_addr ='
+        line: 'http_addr = {{ grafana_http_addr }}'
+        state: present
+        backrefs: yes
+      notify:
+        - Reiniciar Grafana
+
+    - name: Iniciar o serviço do Grafana para que o banco de dados seja inicializado
+      systemd:
+        name: grafana-server
+        state: started
+        enabled: yes
+      
+    - name: Aguardar o serviço do Grafana estar disponível na porta 3000
+      wait_for:
+        port: 3000
+        host: "{{ ansible_host }}"
+        timeout: 120
+      
+    - name: Redefinir a senha do usuário admin
+      command: "grafana-cli admin reset-admin-password {{ grafana_admin_password }}"
+      changed_when: true
+      notify:
+        - Reiniciar Grafana
+      
+  handlers:
+    - name: Reiniciar Grafana
+      systemd:
+        name: grafana-server
+        state: restarted
