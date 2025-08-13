@@ -1,7 +1,5 @@
 #!/bin/bash
 
-# Este script lê o IP público da instância criada pelo Terraform.
-
 if [ ! -f ../compute/terraform.tfstate ]; then
   echo "Terraform state file not found."
   exit 1
