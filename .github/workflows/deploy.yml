@@ -47,9 +47,12 @@ jobs:
       - name: Create Dynamic Inventory
         id: create-inventory
         run: |
-          TF_STATE_IP=$(terraform -chdir=./compute output -raw instance_ip)
-          TF_STATE_IP=$(echo "$TF_STATE_IP" | tr -d '\r\n')  # remove quebras de linha
-
+          # Captura somente o IP puro do Terraform, sem logs extras
+          TF_STATE_IP=$(terraform -chdir=./compute output -raw instance_ip 2>/dev/null | tr -d '\r\n' | grep -Eo '([0-9]{1,3}\.){3}[0-9]{1,3}')
+          
+          echo "📌 IP capturado: $TF_STATE_IP"
+          
+          # Gera inventário no formato correto para o Ansible
           cat > ./automation/inventory.json <<EOF
           {
             "grafana-servers": {
@@ -70,6 +73,7 @@ jobs:
 
       - name: Validate Ansible Inventory
         run: |
+          echo "🔍 Validando inventário..."
           ansible-inventory -i ./automation/inventory.json --list
         working-directory: ./
 
