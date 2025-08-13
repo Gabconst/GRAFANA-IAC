@@ -44,19 +44,16 @@ jobs:
       - name: Install Ansible
         run: pip install ansible
 
-      # NOVO PASSO: CRIA O INVENTÁRIO DINAMICAMENTE
       - name: Create Dynamic Inventory
         id: create-inventory
         run: |
-          # Captura o IP público da saída do Terraform
           TF_STATE_IP=$(terraform -chdir=./compute output -raw instance_ip)
           
-          # Cria um arquivo de inventário JSON em tempo de execução
           cat <<'END_OF_JSON' > ./automation/inventory.json
           {
             "grafana-servers": {
               "hosts": [
-                "'"$TF_STATE_IP"'"
+                "$TF_STATE_IP"
               ],
               "vars": {
                 "ansible_user": "ubuntu",
