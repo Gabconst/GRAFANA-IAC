@@ -9,19 +9,21 @@ jobs:
   deploy-infra:
     runs-on: ubuntu-latest
     permissions:
-      id-token: write
+      id-token: write # Necessário para a autenticação OIDC com a AWS
       contents: read
       
     steps:
       - name: Checkout Repository
         uses: actions/checkout@v3
 
+      # === AUTENTICAÇÃO NA AWS USANDO OIDC ===
       - name: Configure AWS Credentials
         uses: aws-actions/configure-aws-credentials@v1
         with:
           aws-region: us-east-1
           role-to-assume: arn:aws:iam::427547500346:role/GitHubActionsRole
 
+      # === ETAPA 1: TERRAFORM ===
       - name: Setup Terraform
         uses: hashicorp/setup-terraform@v2
         with:
@@ -36,6 +38,7 @@ jobs:
         run: terraform apply -auto-approve
         working-directory: ./compute
 
+      # === ETAPA 2: ANSIBLE ===
       - name: Setup Python
         uses: actions/setup-python@v4
         with:
@@ -45,17 +48,18 @@ jobs:
         run: pip install ansible
 
       - name: Set Inventory Script as Executable
-        run: chmod +x automation/inventory.sh
-        working-directory: ./
-
-      - name: Debug - Run Inventory Script
-        run: ./automation/inventory.sh
+        run: chmod +x ./automation/inventory.sh
         working-directory: ./
 
       - name: Run Ansible Playbook
         run: |
+          # Cria um arquivo temporário com a senha do Vault
           echo "${{ secrets.ANSIBLE_VAULT_PASS }}" > vault-password.txt
-          ansible-playbook -i automation/inventory.sh playbook.yml --vault-password-file vault-password.txt
+          
+          # Executa o Ansible, apontando para os caminhos corretos
+          ansible-playbook -i ./automation/inventory.sh ./automation/playbook.yml --vault-password-file vault-password.txt
+          
+          # Remove o arquivo temporário por segurança
           rm vault-password.txt
         working-directory: ./
         env:
