@@ -1,146 +1,73 @@
-# **Provisionamento e Configuração de Servidores com Terraform + Ansible — Setup Grafana**
+## README.md
 
-Este projeto provisiona servidores via **Terraform** (pasta `compute`) e os configura automaticamente com **Ansible** (pasta `automation`), instalando e configurando o **Grafana** pronto para uso no navegador.
+### Implantação Automatizada de Grafana na AWS
 
----
+Este projeto utiliza **Terraform** e **Ansible** para automatizar a implantação de uma infraestrutura de monitoramento com Grafana na AWS. O objetivo é seguir as melhores práticas, eliminando o *hardcode* e garantindo a segurança e reutilização do código.
 
-## **📂 Estrutura do Projeto**
+-----
 
-```
-.
-├── automation/              # Automação e configuração com Ansible
-│   ├── group_vars/           # Variáveis de grupo (inclui dados sensíveis)
-│   │   └── grafana-servers.yml  # Inventário criptografado com Ansible Vault
-│   ├── inventory.sh          # Script que gera inventário dinâmico
-│   └── playbook.yml          # Playbook principal do Ansible
-│
-├── compute/                  # Provisionamento de infraestrutura com Terraform
-│   ├── main.tf               # Declara recursos principais
-│   ├── outputs.tf            # Exporta IPs e infos para o Ansible
-│   ├── providers.tf          # Configuração do provedor cloud
-│   ├── terraform.tfvars      # Valores reais das variáveis (não versionado)
-│   └── variables.tf          # Declaração de variáveis usadas no main.tf
-│
-├── devops-pdi.pem            # Chave privada para acesso SSH ao servidor
-├── README.md                 # Este documento
-└── .gitignore                # Arquivos ignorados no versionamento
-```
+### Estrutura de Arquivos e Funções
 
----
+A estrutura do seu projeto é organizada para separar as responsabilidades:
 
-## **🛠️ Descrição dos Principais Arquivos**
+  * **Raiz do Projeto**
 
-### **Pasta `compute` — Terraform**
+      * `.gitignore`: **Crucial para a segurança.** Este arquivo instrui o Git a ignorar arquivos sensíveis como sua chave SSH (`devops-pdi.pem`), o arquivo de estado do Terraform (`terraform.tfstate`) e os arquivos de variáveis (`terraform.tfvars`), garantindo que eles não sejam enviados para o GitHub.
+      * `README.md`: Este arquivo, que você está lendo.
 
-* **`main.tf`** → Define a infraestrutura: instância, rede, regras de segurança etc.
+  * **`compute/` (Código do Terraform)**
 
-* **`variables.tf`** → Declara variáveis para tornar o código reutilizável.
+      * `main.tf`: Define a instância EC2 e o Security Group.
+      * `providers.tf`: Configura o provedor AWS, utilizando variáveis para o perfil e a região.
+      * `variables.tf`: Declara todas as variáveis de entrada do Terraform, como `ami_id` e `instance_type`, sem valores padrão.
+      * `terraform.tfvars`: **Este arquivo define os valores de todas as variáveis** declaradas em `variables.tf`. É aqui que você configura a AMI, o tipo de instância, etc. Este arquivo deve ser ignorado pelo Git.
+      * `outputs.tf`: Expõe o IP público da instância, que é o ponto de conexão entre o Terraform e o Ansible.
+      * `devops-pdi.pem`: Sua chave SSH privada.
 
-* **`terraform.tfvars`** → Guarda os valores reais das variáveis.
-  ⚠️ **Não versionar** este arquivo.
+  * **`automation/` (Código do Ansible)**
 
-  **Exemplo:**
+      * `playbook.yml`: O playbook do Ansible que orquestra a instalação e a configuração do Grafana.
+      * `group_vars/grafana-servers.yml`: **Arquivo de variáveis criptografado**. Ele armazena de forma segura a senha do administrador do Grafana usando o Ansible Vault.
+      * `inventory.sh`: **Inventário dinâmico.** Este script lê o IP público da sua instância automaticamente do `terraform.tfstate`, eliminando a necessidade de um arquivo `hosts.yml` estático.
 
-  ```hcl
-  region        = "us-east-1"
-  instance_type = "t3.micro"
-  ssh_key_path  = "~/.ssh/id_rsa.pub"
-  grafana_port  = 3000
-  ```
+-----
 
-* **`outputs.tf`** → Exporta informações como IP público para serem usadas pelo Ansible.
+### Fluxo de Trabalho Completo
 
-* **`providers.tf`** → Configura o provedor (ex: AWS, OCI, Azure).
+#### Fase 1: Provisionamento da Infraestrutura com Terraform
 
----
+1.  Navegue até a pasta `compute`:
+    ```bash
+    cd compute
+    ```
+2.  Inicie o Terraform:
+    ```bash
+    terraform init
+    ```
+3.  Execute o `terraform apply` para criar a infraestrutura na AWS:
+    ```bash
+    terraform apply --auto-approve
+    ```
+    O IP público da sua instância será salvo no `terraform.tfstate`.
 
-### **Pasta `automation` — Ansible**
+#### Fase 2: Configuração com Ansible
 
-* **`playbook.yml`** →
+1.  Navegue até a pasta `automation`:
+    ```bash
+    cd ../automation
+    ```
+2.  Execute o playbook do Ansible:
+    ```bash
+    ansible-playbook -i inventory.sh playbook.yml --ask-vault-pass
+    ```
+      * O inventário dinâmico (`-i inventory.sh`) encontrará o IP da instância automaticamente.
+      * O `--ask-vault-pass` pedirá a senha que você usou para criptografar o arquivo `grafana-servers.yml`.
 
-  * Instala o Grafana e suas dependências.
-  * Configura o firewall liberando a porta configurada.
-  * Habilita e inicia o serviço do Grafana.
-  * Garante que esteja acessível no navegador.
+-----
 
-* **`inventory.sh`** →
-  Script que lê a saída do Terraform (`terraform output`) e gera o inventário dinâmico para o Ansible.
-  **Uso:**
+### Gerenciamento de Variáveis e Senhas
 
-  ```bash
-  cd automation
-  ./inventory.sh
-  ```
-
-* **`group_vars/grafana-servers.yml`** →
-  Variáveis sensíveis (usuário, senha, IPs, configs específicas) **criptografadas** com Ansible Vault.
-
----
-
-## **🔐 Criptografar e Descriptografar com Ansible Vault**
-
-**Criptografar arquivo:**
-
-```bash
-ansible-vault encrypt group_vars/grafana-servers.yml
-```
-
-**Visualizar conteúdo:**
-
-```bash
-ansible-vault view group_vars/grafana-servers.yml
-```
-
-**Editar conteúdo protegido:**
-
-```bash
-ansible-vault edit group_vars/grafana-servers.yml
-```
-
-**Executar playbook usando arquivo criptografado:**
-
-```bash
-ansible-playbook playbook.yml --ask-vault-pass
-```
-
----
-
-## **🚀 Fluxo de Uso do Projeto**
-
-1. **Criar o `terraform.tfvars`** em `compute/` com suas variáveis.
-2. **Provisionar infraestrutura**:
-
-   ```bash
-   cd compute
-   terraform init
-   terraform apply
-   ```
-3. **Gerar inventário para o Ansible**:
-
-   ```bash
-   cd ../automation
-   ./inventory.sh
-   ```
-4. **Executar o playbook**:
-
-   ```bash
-   ansible-playbook playbook.yml --ask-vault-pass
-   ```
-5. **Acessar Grafana no navegador**:
-
-   ```
-   http://<IP_PUBLICO>:<PORTA>
-   ```
-
----
-
-## **📌 Boas Práticas**
-
-* Nunca versionar `terraform.tfvars` nem chaves privadas (`.pem`).
-* Proteger variáveis sensíveis com **Ansible Vault**.
-* Sempre rodar `inventory.sh` após criar ou alterar instâncias.
-* Usar `terraform plan` antes de aplicar mudanças.
-
----
-
-Se quiser, posso **acrescentar um diagrama visual** mostrando o fluxo **Terraform → Inventory → Ansible → Grafana** para deixar o README mais didático. Isso daria um ar profissional e facilitaria para qualquer pessoa entender o processo. Quer que eu já adicione?
+  * **Terraform:** As variáveis de configuração estão no `terraform.tfvars`. Para alterá-las, basta editar este arquivo.
+  * **Ansible Vault:** Para gerenciar o arquivo criptografado do Ansible:
+      * **Ver conteúdo:** `ansible-vault view group_vars/grafana-servers.yml`
+      * **Editar:** `ansible-vault edit group_vars/grafana-servers.yml`
