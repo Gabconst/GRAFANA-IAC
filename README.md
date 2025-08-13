@@ -48,7 +48,7 @@ Esta fase instala o Grafana e suas dependências na instância recém-criada.
     ```
 4.  Execute o playbook do Ansible, fornecendo a senha do Vault quando solicitada:
     ```bash
-    ansible-playbook -u ubuntu --private-key ../compute/devops-pdi.pem -i hosts.yml playbook.yml --ask-vault-pass
+    ansible-playbook -u ubuntu --private-key ../compute/sua-chave.pem -i hosts.yml playbook.yml --ask-vault-pass
     ```
 
 ### Acesso ao Grafana
