@@ -1,3 +1,4 @@
+cat > automation/inventory.sh << 'EOF'
 #!/bin/bash
 
 if [ ! -f ../compute/terraform.tfstate ]; then
@@ -7,7 +8,7 @@ fi
 
 TF_STATE_IP=$(terraform -chdir=../compute output -raw instance_ip)
 
-cat <<EOF
+cat <<END_OF_JSON
 {
   "grafana-servers": {
     "hosts": [
@@ -19,4 +20,5 @@ cat <<EOF
     }
   }
 }
+END_OF_JSON
 EOF
