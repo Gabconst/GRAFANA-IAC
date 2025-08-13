@@ -9,21 +9,19 @@ jobs:
   deploy-infra:
     runs-on: ubuntu-latest
     permissions:
-      id-token: write # Necessário para a autenticação OIDC com a AWS
+      id-token: write
       contents: read
       
     steps:
       - name: Checkout Repository
         uses: actions/checkout@v3
 
-      # === AUTENTICAÇÃO NA AWS USANDO OIDC ===
       - name: Configure AWS Credentials
         uses: aws-actions/configure-aws-credentials@v1
         with:
           aws-region: us-east-1
           role-to-assume: arn:aws:iam::427547500346:role/GitHubActionsRole
 
-      # === ETAPA 1: TERRAFORM ===
       - name: Setup Terraform
         uses: hashicorp/setup-terraform@v2
         with:
@@ -38,7 +36,6 @@ jobs:
         run: terraform apply -auto-approve
         working-directory: ./compute
 
-      # === ETAPA 2: ANSIBLE ===
       - name: Setup Python
         uses: actions/setup-python@v4
         with:
@@ -47,19 +44,33 @@ jobs:
       - name: Install Ansible
         run: pip install ansible
 
-      - name: Set Inventory Script as Executable
-        run: chmod +x ./automation/inventory.sh
+      # NOVO PASSO: CRIA O INVENTÁRIO DINAMICAMENTE
+      - name: Create Dynamic Inventory
+        id: create-inventory
+        run: |
+          # Captura o IP público da saída do Terraform
+          TF_STATE_IP=$(terraform -chdir=./compute output -raw instance_ip)
+          
+          # Cria um arquivo de inventário JSON em tempo de execução
+          cat <<'END_OF_JSON' > ./automation/inventory.json
+          {
+            "grafana-servers": {
+              "hosts": [
+                "'"$TF_STATE_IP"'"
+              ],
+              "vars": {
+                "ansible_user": "ubuntu",
+                "ansible_ssh_private_key_file": "./compute/devops-pdi.pem"
+              }
+            }
+          }
+          END_OF_JSON
         working-directory: ./
 
       - name: Run Ansible Playbook
         run: |
-          # Cria um arquivo temporário com a senha do Vault
           echo "${{ secrets.ANSIBLE_VAULT_PASS }}" > vault-password.txt
-          
-          # Executa o Ansible, apontando para os caminhos corretos
-          ansible-playbook -i ./automation/inventory.sh ./automation/playbook.yml --vault-password-file vault-password.txt
-          
-          # Remove o arquivo temporário por segurança
+          ansible-playbook -i ./automation/inventory.json ./automation/playbook.yml --vault-password-file vault-password.txt
           rm vault-password.txt
         working-directory: ./
         env:
