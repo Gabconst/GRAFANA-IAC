@@ -11,7 +11,7 @@ jobs:
     permissions:
       id-token: write
       contents: read
-      
+
     steps:
       - name: Checkout Repository
         uses: actions/checkout@v3
@@ -44,15 +44,18 @@ jobs:
       - name: Install Ansible
         run: pip install ansible
 
-      - name: Create Dynamic Inventory
-        id: create-inventory
+      - name: Get Terraform Output
+        id: tf-output
         run: |
-          # Captura apenas o IP puro do Terraform, sem eco extra e sem quebra de linha
-          TF_STATE_IP=$(terraform -chdir=./compute output -raw instance_ip 2>/dev/null | tr -d '\r\n' | head -n1)
-          
-          echo "📌 IP capturado: $TF_STATE_IP"
-          
-          # Cria inventário Ansible no formato correto
+          terraform -chdir=./compute output -raw instance_ip > instance_ip.txt
+          IP=$(head -n1 instance_ip.txt | tr -d '\r\n')
+          echo "📌 IP capturado: $IP"
+          echo "IP=$IP" >> $GITHUB_ENV
+
+      - name: Create Dynamic Inventory
+        run: |
+          TF_STATE_IP=${{ env.IP }}
+
           cat > ./automation/inventory.json <<EOF
           {
             "grafana-servers": {
