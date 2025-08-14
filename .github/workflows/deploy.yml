@@ -13,7 +13,7 @@ jobs:
       AWS_DEFAULT_REGION: us-east-1
       ANSIBLE_VAULT_PASSWORD: ${{ secrets.ANSIBLE_VAULT_PASSWORD }}
     steps:
-      # --- Checkout do repositório ---
+      # --- Checkout ---
       - name: Checkout repository
         uses: actions/checkout@v4
 
@@ -40,20 +40,37 @@ jobs:
       - name: Terraform Apply
         run: terraform -chdir=compute apply -auto-approve
 
+      # --- Configurar chave SSH do GitHub Secret ---
+      - name: Setup SSH Key
+        run: |
+          mkdir -p ~/.ssh
+          echo "${{ secrets.DEVOPS_PDI_PEM }}" > ~/.ssh/devops-pdi.pem
+          chmod 600 ~/.ssh/devops-pdi.pem
+
       # --- Ansible ---
       - name: Install Ansible & Dependencies
         run: |
           sudo apt-get update -y
           sudo apt-get install -y ansible python3-boto3 unzip jq
-          mkdir -p ~/.ssh
-          cp compute/devops-pdi.pem ~/.ssh/devops-pdi.pem
-          chmod 600 ~/.ssh/devops-pdi.pem
 
       - name: Run Ansible Playbook
         run: |
+          BASE_DIR="$(cd "$(dirname "$0")" && pwd)"
+          TF_STATE_IP=$(terraform -chdir="$BASE_DIR/../compute" output -raw instance_ip)
+          cat <<EOF > "$BASE_DIR/automation/inventory.json"
+{
+  "grafana-servers": {
+    "hosts": ["$TF_STATE_IP"],
+    "vars": {
+      "ansible_host": "$TF_STATE_IP",
+      "ansible_user": "ubuntu",
+      "ansible_ssh_private_key_file": "~/.ssh/devops-pdi.pem"
+    }
+  }
+}
+EOF
           echo "$ANSIBLE_VAULT_PASSWORD" > ~/.vault_pass.txt
-          chmod +x automation/inventory.sh
           ansible-playbook \
-            -i automation/inventory.sh \
-            automation/playbook.yml \
+            -i "$BASE_DIR/automation/inventory.json" \
+            "$BASE_DIR/automation/playbook.yml" \
             --vault-password-file ~/.vault_pass.txt
