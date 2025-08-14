@@ -13,7 +13,7 @@ jobs:
       AWS_DEFAULT_REGION: us-east-1
       ANSIBLE_VAULT_PASSWORD: ${{ secrets.ANSIBLE_VAULT_PASSWORD }}
     steps:
-      # --- Checkout ---
+      # --- Checkout do repositório ---
       - name: Checkout repository
         uses: actions/checkout@v4
 
@@ -47,30 +47,28 @@ jobs:
           echo "${{ secrets.DEVOPS_PDI_PEM }}" > ~/.ssh/devops-pdi.pem
           chmod 600 ~/.ssh/devops-pdi.pem
 
-      # --- Ansible ---
+      # --- Instalar Ansible e dependências ---
       - name: Install Ansible & Dependencies
         run: |
           sudo apt-get update -y
           sudo apt-get install -y ansible python3-boto3 unzip jq
 
+      # --- Rodar Ansible Playbook usando inventory .ini ---
       - name: Run Ansible Playbook
         run: |
           BASE_DIR="$(cd "$(dirname "$0")" && pwd)"
+          # Pegar IP da instância criada pelo Terraform
           TF_STATE_IP=$(terraform -chdir="$BASE_DIR/../compute" output -raw instance_ip)
-          cat <<EOF > "$BASE_DIR/automation/inventory.json"
-{
-  "grafana-servers": {
-    "hosts": ["$TF_STATE_IP"],
-    "vars": {
-      "ansible_host": "$TF_STATE_IP",
-      "ansible_user": "ubuntu",
-      "ansible_ssh_private_key_file": "~/.ssh/devops-pdi.pem"
-    }
-  }
-}
-EOF
+
+          # Criar inventory .ini seguro
+          echo "[grafana-servers]" > "$BASE_DIR/automation/inventory.ini"
+          echo "$TF_STATE_IP ansible_user=ubuntu ansible_ssh_private_key_file=~/.ssh/devops-pdi.pem" >> "$BASE_DIR/automation/inventory.ini"
+
+          # Criar arquivo de Vault
           echo "$ANSIBLE_VAULT_PASSWORD" > ~/.vault_pass.txt
+
+          # Rodar playbook
           ansible-playbook \
-            -i "$BASE_DIR/automation/inventory.json" \
+            -i "$BASE_DIR/automation/inventory.ini" \
             "$BASE_DIR/automation/playbook.yml" \
             --vault-password-file ~/.vault_pass.txt
