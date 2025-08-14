@@ -32,13 +32,13 @@ jobs:
           terraform_version: 1.9.7
 
       - name: Terraform Init
-        run: terraform -chdir=compute init
+        run: terraform -chdir="$GITHUB_WORKSPACE/compute" init
 
       - name: Terraform Plan
-        run: terraform -chdir=compute plan
+        run: terraform -chdir="$GITHUB_WORKSPACE/compute" plan
 
       - name: Terraform Apply
-        run: terraform -chdir=compute apply -auto-approve
+        run: terraform -chdir="$GITHUB_WORKSPACE/compute" apply -auto-approve
 
       # --- Configurar chave SSH do GitHub Secret ---
       - name: Setup SSH Key
@@ -56,9 +56,8 @@ jobs:
       # --- Rodar Ansible Playbook com retry no IP ---
       - name: Run Ansible Playbook
         run: |
-          BASE_DIR="$(cd "$(dirname "$0")" && pwd)"
-          TF_DIR="$BASE_DIR/../compute"
-          PLAYBOOK_DIR="$BASE_DIR/automation"
+          PLAYBOOK_DIR="$GITHUB_WORKSPACE/automation"
+          TF_DIR="$GITHUB_WORKSPACE/compute"
 
           # Retry para pegar IP da instância
           for i in {1..10}; do
