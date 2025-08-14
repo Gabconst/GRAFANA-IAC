@@ -53,22 +53,36 @@ jobs:
           sudo apt-get update -y
           sudo apt-get install -y ansible python3-boto3 unzip jq
 
-      # --- Rodar Ansible Playbook usando inventory .ini ---
+      # --- Rodar Ansible Playbook com retry no IP ---
       - name: Run Ansible Playbook
         run: |
           BASE_DIR="$(cd "$(dirname "$0")" && pwd)"
-          # Pegar IP da instância criada pelo Terraform
-          TF_STATE_IP=$(terraform -chdir="$BASE_DIR/../compute" output -raw instance_ip)
+          TF_DIR="$BASE_DIR/../compute"
+          PLAYBOOK_DIR="$BASE_DIR/automation"
 
-          # Criar inventory .ini seguro
-          echo "[grafana-servers]" > "$BASE_DIR/automation/inventory.ini"
-          echo "$TF_STATE_IP ansible_user=ubuntu ansible_ssh_private_key_file=~/.ssh/devops-pdi.pem" >> "$BASE_DIR/automation/inventory.ini"
+          # Retry para pegar IP da instância
+          for i in {1..10}; do
+            TF_STATE_IP=$(terraform -chdir="$TF_DIR" output -raw instance_ip 2>/dev/null)
+            if [ -n "$TF_STATE_IP" ]; then
+              echo "IP encontrado: $TF_STATE_IP"
+              break
+            else
+              echo "IP ainda não disponível, aguardando 10s..."
+              sleep 10
+            fi
+          done
+
+          if [ -z "$TF_STATE_IP" ]; then
+            echo "Erro: Não foi possível obter o IP da instância EC2."
+            exit 1
+          fi
+
+          # Criar inventory .ini
+          echo "[grafana-servers]" > "$PLAYBOOK_DIR/inventory.ini"
+          echo "$TF_STATE_IP ansible_user=ubuntu ansible_ssh_private_key_file=~/.ssh/devops-pdi.pem" >> "$PLAYBOOK_DIR/inventory.ini"
 
           # Criar arquivo de Vault
           echo "$ANSIBLE_VAULT_PASSWORD" > ~/.vault_pass.txt
 
           # Rodar playbook
-          ansible-playbook \
-            -i "$BASE_DIR/automation/inventory.ini" \
-            "$BASE_DIR/automation/playbook.yml" \
-            --vault-password-file ~/.vault_pass.txt
+          ansible-playbook -i "$PLAYBOOK_DIR/inventory.ini" "$PLAYBOOK_DIR/playbook.yml" --vault-password-file ~/.vault_pass.txt -vvv
