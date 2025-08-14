@@ -1,7 +1,0 @@
-ami_id               = "ami-020cba7c55df1f615"
-instance_type        = "t2.micro"
-key_name             = "devops-pdi"
-allowed_ssh_cidr     = "0.0.0.0/0"
-allowed_grafana_cidr = "0.0.0.0/0"
-aws_profile          = "default"
-aws_region           = "us-east-1"

@@ -1,4 +1,4 @@
-name: Deploy Infra + Config
+name: Deploy GRAFANA SERVER
 
 on:
   workflow_dispatch:
@@ -11,8 +11,10 @@ jobs:
     runs-on: ubuntu-latest
     env:
       AWS_DEFAULT_REGION: us-east-1
+      GRAFANA_ADMIN_PASSWORD: ${{ secrets.GRAFANA_ADMIN_PASSWORD }}
+
     steps:
-      # --- Checkout do repositório ---
+      # --- Checkout ---
       - name: Checkout repository
         uses: actions/checkout@v4
 
@@ -31,13 +33,13 @@ jobs:
           terraform_version: 1.9.7
 
       - name: Terraform Init
-        run: terraform -chdir="$GITHUB_WORKSPACE/compute" init
+        run: terraform -chdir=compute init
 
       - name: Terraform Plan
-        run: terraform -chdir="$GITHUB_WORKSPACE/compute" plan
+        run: terraform -chdir=compute plan
 
       - name: Terraform Apply
-        run: terraform -chdir="$GITHUB_WORKSPACE/compute" apply -auto-approve
+        run: terraform -chdir=compute apply -auto-approve
 
       # --- Configurar chave SSH do GitHub Secret ---
       - name: Setup SSH Key
@@ -46,46 +48,35 @@ jobs:
           echo "${{ secrets.DEVOPS_PDI_PEM }}" > ~/.ssh/devops-pdi.pem
           chmod 600 ~/.ssh/devops-pdi.pem
 
-      # --- Instalar Ansible e dependências ---
+      # --- Instalar Ansible ---
       - name: Install Ansible & Dependencies
         run: |
           sudo apt-get update -y
           sudo apt-get install -y ansible python3-boto3 unzip jq
 
-      # --- Rodar Ansible Playbook ---
+      # --- Executar Playbook ---
       - name: Run Ansible Playbook
         run: |
-          PLAYBOOK_DIR="$GITHUB_WORKSPACE/automation"
-          TF_DIR="$GITHUB_WORKSPACE/compute"
-
-          # Retry para pegar IP da instância e garantir SSH
-          for i in {1..12}; do
-            TF_STATE_IP=$(terraform -chdir="$TF_DIR" output -raw instance_ip 2>/dev/null)
-            if [ -n "$TF_STATE_IP" ]; then
-              echo "IP encontrado: $TF_STATE_IP"
-              # Testa conexão SSH
-              if ssh -o StrictHostKeyChecking=no -i ~/.ssh/devops-pdi.pem ubuntu@$TF_STATE_IP "echo ok" 2>/dev/null; then
-                echo "SSH disponível!"
-                break
-              fi
-            fi
-            echo "Instância ainda não pronta, aguardando 10s..."
-            sleep 10
-          done
-
-          if [ -z "$TF_STATE_IP" ]; then
-            echo "Erro: Não foi possível obter o IP da instância EC2."
-            exit 1
-          fi
-
-          # Criar inventory para Ansible
-          cat > "$PLAYBOOK_DIR/inventory.ini" <<EOF
-          [grafana-servers]
-          $TF_STATE_IP ansible_user=ubuntu ansible_ssh_private_key_file=~/.ssh/devops-pdi.pem ansible_ssh_common_args='-o StrictHostKeyChecking=no'
+          BASE_DIR="$GITHUB_WORKSPACE"
+          
+          # Pega o IP público da instância criada no Terraform
+          TF_STATE_IP=$(terraform -chdir="$BASE_DIR/compute" output -raw instance_ip)
+          
+          # Cria inventário dinâmico
+          cat <<EOF > "$BASE_DIR/automation/inventory.json"
+          {
+            "grafana-servers": {
+              "hosts": ["$TF_STATE_IP"],
+              "vars": {
+                "ansible_host": "$TF_STATE_IP",
+                "ansible_user": "ubuntu",
+                "ansible_ssh_private_key_file": "~/.ssh/devops-pdi.pem"
+              }
+            }
+          }
           EOF
-
-          # Criar arquivo de Vault usando secret correto, sem quebra de linha extra
-          echo -n "${{ secrets.ANSIBLE_VAULT_PASS }}" > ~/.vault_pass.txt
-
-          # Rodar playbook
-          ansible-playbook -i "$PLAYBOOK_DIR/inventory.ini" "$PLAYBOOK_DIR/playbook.yml" --vault-password-file ~/.vault_pass.txt -vvv
+          
+          # Executa o playbook usando variável de ambiente (sem vault)
+          ansible-playbook \
+            -i "$BASE_DIR/automation/inventory.json" \
+            "$BASE_DIR/automation/playbook.yml"
