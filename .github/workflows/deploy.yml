@@ -1,89 +1,52 @@
-name: Deploy Infra and Grafana
+name: Deploy Infra + Config
 
 on:
+  workflow_dispatch:
   push:
     branches:
       - main
 
 jobs:
-  deploy-infra:
+  terraform-ansible:
     runs-on: ubuntu-latest
-    permissions:
-      id-token: write
-      contents: read
-
+    env:
+      AWS_ACCESS_KEY_ID: ${{ secrets.AWS_ACCESS_KEY_ID }}
+      AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+      AWS_DEFAULT_REGION: us-east-1
+      ANSIBLE_VAULT_PASSWORD: ${{ secrets.ANSIBLE_VAULT_PASSWORD }}
     steps:
-      - name: Checkout Repository
-        uses: actions/checkout@v3
+      - name: Checkout repository
+        uses: actions/checkout@v4
 
-      - name: Configure AWS Credentials
-        uses: aws-actions/configure-aws-credentials@v1
-        with:
-          aws-region: us-east-1
-          role-to-assume: arn:aws:iam::427547500346:role/GitHubActionsRole
-
+      # --- Terraform ---
       - name: Setup Terraform
-        uses: hashicorp/setup-terraform@v2
+        uses: hashicorp/setup-terraform@v3
         with:
-          terraform_version: 0.14.9
+          terraform_version: 1.9.7
 
       - name: Terraform Init
-        working-directory: ./compute
-        run: terraform init
+        run: terraform -chdir=compute init
+
+      - name: Terraform Plan
+        run: terraform -chdir=compute plan
 
       - name: Terraform Apply
-        id: apply
-        working-directory: ./compute
-        run: terraform apply -auto-approve
+        run: terraform -chdir=compute apply -auto-approve
 
-      - name: Setup Python
-        uses: actions/setup-python@v4
-        with:
-          python-version: '3.x'
-
-      - name: Install Ansible
-        run: pip install ansible
-
-      - name: Get Terraform Output
-        working-directory: ./compute
+      # --- Ansible ---
+      - name: Install Ansible & Dependencies
         run: |
-          # Gera arquivo com o IP no diretório raiz
-          terraform output -raw instance_ip > ../instance_ip.txt
-          echo "📌 Terraform output gerado em instance_ip.txt"
-
-      - name: Create Dynamic Inventory
-        run: |
-          # Lê o IP puro do arquivo e remove quebras de linha
-          TF_STATE_IP=$(head -n1 instance_ip.txt | tr -d '\r\n')
-          echo "📌 IP capturado: $TF_STATE_IP"
-
-          # Gera inventário JSON válido para Ansible
-          cat > ./automation/inventory.json <<EOF
-          {
-            "grafana-servers": {
-              "hosts": {
-                "$TF_STATE_IP": {}
-              },
-              "vars": {
-                "ansible_user": "ubuntu",
-                "ansible_ssh_private_key_file": "./compute/devops-pdi.pem"
-              }
-            }
-          }
-          EOF
-
-          echo "✅ Inventory.json gerado:"
-          cat ./automation/inventory.json
-
-      - name: Validate Inventory
-        run: |
-          echo "🔍 Validando inventário..."
-          ansible-inventory -i ./automation/inventory.json --list
+          sudo apt-get update -y
+          sudo apt-get install -y ansible python3-boto3 unzip jq
+          mkdir -p ~/.ssh
+          cp compute/devops-pdi.pem ~/.ssh/devops-pdi.pem
+          chmod 600 ~/.ssh/devops-pdi.pem
 
       - name: Run Ansible Playbook
         run: |
-          echo "${{ secrets.ANSIBLE_VAULT_PASS }}" > vault-password.txt
-          ansible-playbook -i ./automation/inventory.json ./automation/playbook.yml --vault-password-file vault-password.txt
-          rm vault-password.txt
-        env:
-          ANSIBLE_VAULT_PASS: ${{ secrets.ANSIBLE_VAULT_PASS }}
+          echo "$ANSIBLE_VAULT_PASSWORD" > ~/.vault_pass.txt
+          chmod +x automation/inventory.sh
+          ansible-playbook \
+            -i automation/inventory.sh \
+            automation/playbook.yml \
+            --vault-password-file ~/.vault_pass.txt
