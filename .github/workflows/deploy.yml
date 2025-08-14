@@ -10,13 +10,19 @@ jobs:
   terraform-ansible:
     runs-on: ubuntu-latest
     env:
-      AWS_ACCESS_KEY_ID: ${{ secrets.AWS_ACCESS_KEY_ID }}
-      AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
       AWS_DEFAULT_REGION: us-east-1
       ANSIBLE_VAULT_PASSWORD: ${{ secrets.ANSIBLE_VAULT_PASSWORD }}
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
+
+      # --- Configure AWS Role ---
+      - name: Configure AWS Credentials via Role
+        uses: aws-actions/configure-aws-credentials@v2
+        with:
+          role-to-assume: arn:aws:iam::427547500346:role/GitHubActionsRole
+          aws-region: us-east-1
+          role-session-name: github-actions
 
       # --- Terraform ---
       - name: Setup Terraform
