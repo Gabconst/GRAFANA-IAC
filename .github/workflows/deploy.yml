@@ -1,4 +1,4 @@
-name: Grafana`s Deploy
+name: Grafana`s Deployer
 
 on:
   workflow_dispatch:
