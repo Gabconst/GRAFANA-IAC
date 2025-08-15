@@ -1,4 +1,4 @@
-name: Deploy Infra + Config
+name: GRAFANA`s Deploy
 
 on:
   workflow_dispatch:
