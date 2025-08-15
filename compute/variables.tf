@@ -28,7 +28,3 @@ variable "aws_profile" {
   type        = string
 }
 
-variable "aws_region" {
-  description = "Região da AWS a ser usada"
-  type        = string
-}
