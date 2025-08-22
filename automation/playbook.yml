@@ -1,4 +1,4 @@
-- name: Grafana`s Deploy
+- name: Grafana`s Deploy AWS
   hosts: grafana-servers
   become: yes
   vars_files:
