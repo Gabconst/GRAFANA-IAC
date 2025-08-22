@@ -1,4 +1,4 @@
-name: Grafana`s Deployer
+name: Grafana`s Deploy AWS
 
 on:
   workflow_dispatch:
@@ -30,15 +30,21 @@ jobs:
         with:
           terraform_version: 1.9.7
 
-      # --- Terraform Init e Apply usando módulo pai remoto ---
+      # --- Terraform Init + Plan + Apply ---
       - name: Terraform Init
-        run: terraform -chdir="$GITHUB_WORKSPACE" init -upgrade
+        run: |
+          # Limpar cache antigo e lock file
+          rm -rf "$GITHUB_WORKSPACE/compute/.terraform"
+          rm -f "$GITHUB_WORKSPACE/compute/.terraform.lock.hcl"
+
+          # Inicializa Terraform e força upgrade do provider
+          terraform -chdir="$GITHUB_WORKSPACE/compute" init -upgrade
 
       - name: Terraform Plan
-        run: terraform -chdir="$GITHUB_WORKSPACE" plan
+        run: terraform -chdir="$GITHUB_WORKSPACE/compute" plan
 
       - name: Terraform Apply
-        run: terraform -chdir="$GITHUB_WORKSPACE" apply -auto-approve
+        run: terraform -chdir="$GITHUB_WORKSPACE/compute" apply -auto-approve
 
       # --- Configurar chave SSH do GitHub Secret ---
       - name: Setup SSH Key
@@ -57,13 +63,13 @@ jobs:
       - name: Run Ansible Playbook
         run: |
           PLAYBOOK_DIR="$GITHUB_WORKSPACE/automation"
+          TF_DIR="$GITHUB_WORKSPACE/compute"
 
           # Retry para pegar IP da instância e garantir SSH
           for i in {1..12}; do
-            TF_STATE_IP=$(terraform -chdir="$GITHUB_WORKSPACE" output -raw instance_ip 2>/dev/null)
+            TF_STATE_IP=$(terraform -chdir="$TF_DIR" output -raw instance_ip 2>/dev/null)
             if [ -n "$TF_STATE_IP" ]; then
               echo "IP encontrado: $TF_STATE_IP"
-              # Testa conexão SSH
               if ssh -o StrictHostKeyChecking=no -i ~/.ssh/devops-pdi.pem ubuntu@$TF_STATE_IP "echo ok" 2>/dev/null; then
                 echo "SSH disponível!"
                 break
