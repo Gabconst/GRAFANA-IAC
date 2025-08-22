@@ -32,7 +32,7 @@ jobs:
 
       # --- Terraform Init e Apply usando módulo pai remoto ---
       - name: Terraform Init
-        run: terraform -chdir="$GITHUB_WORKSPACE" init
+        run: terraform -chdir="$GITHUB_WORKSPACE" init -upgrade
 
       - name: Terraform Plan
         run: terraform -chdir="$GITHUB_WORKSPACE" plan
