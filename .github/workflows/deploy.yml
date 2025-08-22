@@ -12,11 +12,9 @@ jobs:
     env:
       AWS_DEFAULT_REGION: ${{ secrets.AWS_REGION }}
     steps:
-      # --- Checkout do repositório ---
       - name: Checkout repository
         uses: actions/checkout@v4
 
-      # --- Configurar credenciais AWS ---
       - name: Configure AWS Credentials
         uses: aws-actions/configure-aws-credentials@v2
         with:
@@ -24,58 +22,47 @@ jobs:
           aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
           aws-region: ${{ secrets.AWS_REGION }}
 
-      # --- Setup Terraform ---
       - name: Setup Terraform
         uses: hashicorp/setup-terraform@v3
         with:
           terraform_version: 1.9.7
 
-      # --- Terraform Init + Plan + Apply ---
       - name: Terraform Init
         run: |
-          # Limpar cache antigo e lock file
-          rm -rf "$GITHUB_WORKSPACE/compute/.terraform"
-          rm -f "$GITHUB_WORKSPACE/compute/.terraform.lock.hcl"
-
-          # Inicializa Terraform e força upgrade do provider
-          terraform -chdir="$GITHUB_WORKSPACE/compute" init -upgrade
+          rm -rf "$GITHUB_WORKSPACE/module-pai/.terraform"
+          rm -f "$GITHUB_WORKSPACE/module-pai/.terraform.lock.hcl"
+          terraform -chdir="$GITHUB_WORKSPACE/module-pai" init -upgrade
 
       - name: Terraform Plan
-        run: terraform -chdir="$GITHUB_WORKSPACE/compute" plan
+        run: terraform -chdir="$GITHUB_WORKSPACE/module-pai" plan
 
       - name: Terraform Apply
-        run: terraform -chdir="$GITHUB_WORKSPACE/compute" apply -auto-approve
+        run: terraform -chdir="$GITHUB_WORKSPACE/module-pai" apply -auto-approve
 
-      # --- Configurar chave SSH do GitHub Secret ---
       - name: Setup SSH Key
         run: |
           mkdir -p ~/.ssh
           echo "${{ secrets.DEVOPS_PDI_PEM }}" > ~/.ssh/devops-pdi.pem
           chmod 600 ~/.ssh/devops-pdi.pem
 
-      # --- Instalar Ansible e dependências ---
       - name: Install Ansible & Dependencies
         run: |
           sudo apt-get update -y
           sudo apt-get install -y ansible python3-boto3 unzip jq
 
-      # --- Rodar Ansible Playbook ---
       - name: Run Ansible Playbook
         run: |
           PLAYBOOK_DIR="$GITHUB_WORKSPACE/automation"
-          TF_DIR="$GITHUB_WORKSPACE/compute"
+          TF_DIR="$GITHUB_WORKSPACE/module-pai"
 
-          # Retry para pegar IP da instância e garantir SSH
+          # Retry para pegar IP da instância
           for i in {1..12}; do
             TF_STATE_IP=$(terraform -chdir="$TF_DIR" output -raw instance_ip 2>/dev/null)
             if [ -n "$TF_STATE_IP" ]; then
-              echo "IP encontrado: $TF_STATE_IP"
               if ssh -o StrictHostKeyChecking=no -i ~/.ssh/devops-pdi.pem ubuntu@$TF_STATE_IP "echo ok" 2>/dev/null; then
-                echo "SSH disponível!"
                 break
               fi
             fi
-            echo "Instância ainda não pronta, aguardando 10s..."
             sleep 10
           done
 
@@ -90,7 +77,7 @@ jobs:
           $TF_STATE_IP ansible_user=ubuntu ansible_ssh_private_key_file=~/.ssh/devops-pdi.pem ansible_ssh_common_args='-o StrictHostKeyChecking=no'
           EOF
 
-          # Criar arquivo de Vault usando secret correto, sem quebra de linha extra
+          # Criar arquivo de Vault usando secret correto
           echo -n "${{ secrets.ANSIBLE_VAULT_PASS }}" > ~/.vault_pass.txt
 
           # Rodar playbook
