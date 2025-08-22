@@ -24,20 +24,21 @@ jobs:
           aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
           aws-region: ${{ secrets.AWS_REGION }}
 
-      # --- Terraform ---
+      # --- Setup Terraform ---
       - name: Setup Terraform
         uses: hashicorp/setup-terraform@v3
         with:
           terraform_version: 1.9.7
 
+      # --- Terraform Init e Apply usando módulo pai remoto ---
       - name: Terraform Init
-        run: terraform -chdir="$GITHUB_WORKSPACE/compute" init
+        run: terraform -chdir="$GITHUB_WORKSPACE" init
 
       - name: Terraform Plan
-        run: terraform -chdir="$GITHUB_WORKSPACE/compute" plan
+        run: terraform -chdir="$GITHUB_WORKSPACE" plan
 
       - name: Terraform Apply
-        run: terraform -chdir="$GITHUB_WORKSPACE/compute" apply -auto-approve
+        run: terraform -chdir="$GITHUB_WORKSPACE" apply -auto-approve
 
       # --- Configurar chave SSH do GitHub Secret ---
       - name: Setup SSH Key
@@ -56,11 +57,10 @@ jobs:
       - name: Run Ansible Playbook
         run: |
           PLAYBOOK_DIR="$GITHUB_WORKSPACE/automation"
-          TF_DIR="$GITHUB_WORKSPACE/compute"
 
           # Retry para pegar IP da instância e garantir SSH
           for i in {1..12}; do
-            TF_STATE_IP=$(terraform -chdir="$TF_DIR" output -raw instance_ip 2>/dev/null)
+            TF_STATE_IP=$(terraform -chdir="$GITHUB_WORKSPACE" output -raw instance_ip 2>/dev/null)
             if [ -n "$TF_STATE_IP" ]; then
               echo "IP encontrado: $TF_STATE_IP"
               # Testa conexão SSH
