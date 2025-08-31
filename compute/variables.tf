@@ -1,3 +1,5 @@
+# variavies
+
 variable "ami_id" {
   description = "ID da AMI para a instância EC2"
   type        = string
@@ -62,3 +64,4 @@ variable "egress_cidr_blocks" {
   description = "CIDR blocks para egress do Security Group"
   type        = list(string)
 }
+
