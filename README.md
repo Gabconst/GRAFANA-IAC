@@ -1,73 +1,46 @@
-## README.md
+# Projeto de Automação de Infraestrutura (PDI-DevOps)
 
-### Implantação Automatizada de Grafana na AWS
+Este projeto demonstra a automação completa de infraestrutura usando **Terraform** para provisionar recursos e **Ansible** para configurá-los. O objetivo principal é seguir a metodologia de **Infraestrutura como Código (IaC)**, garantindo que o ambiente seja replicável e gerenciável.
 
-Este projeto utiliza **Terraform** e **Ansible** para automatizar a implantação de uma infraestrutura de monitoramento com Grafana na AWS. O objetivo é seguir as melhores práticas, eliminando o *hardcode* e garantindo a segurança e reutilização do código.
+## Estrutura de Diretórios
 
------
+A estrutura abaixo mostra como os arquivos estão organizados para separar as responsabilidades de provisionamento e configuração.
 
-### Estrutura de Arquivos e Funções
+## Pré-requisitos
 
-A estrutura do seu projeto é organizada para separar as responsabilidades:
+Antes de começar, certifique-se de que os seguintes softwares estão instalados e configurados na sua máquina local:
 
-  * **Raiz do Projeto**
+- **Terraform**: Versão `1.0` ou superior.
+- **Ansible**: Versão `2.9` ou superior.
+- **Chave SSH**: É crucial ter a chave `devops-pdi.pem` na pasta `lab/compute/terraform` e com as permissões corretas (`chmod 400 devops-pdi.pem`) para que o Ansible possa se conectar aos servidores.
 
-      * `.gitignore`: **Crucial para a segurança.** Este arquivo instrui o Git a ignorar arquivos sensíveis como sua chave SSH (`devops-pdi.pem`), o arquivo de estado do Terraform (`terraform.tfstate`) e os arquivos de variáveis (`terraform.tfvars`), garantindo que eles não sejam enviados para o GitHub.
-      * `README.md`: Este arquivo, que você está lendo.
+## Guia de Execução
 
-  * **`compute/` (Código do Terraform)**
+Siga a ordem dos passos para garantir o funcionamento correto do pipeline de automação.
 
-      * `main.tf`: Define a instância EC2 e o Security Group.
-      * `providers.tf`: Configura o provedor AWS, utilizando variáveis para o perfil e a região.
-      * `variables.tf`: Declara todas as variáveis de entrada do Terraform, como `ami_id` e `instance_type`, sem valores padrão.
-      * `terraform.tfvars`: **Este arquivo define os valores de todas as variáveis** declaradas em `variables.tf`. É aqui que você configura a AMI, o tipo de instância, etc. Este arquivo deve ser ignorado pelo Git.
-      * `outputs.tf`: Expõe o IP público da instância, que é o ponto de conexão entre o Terraform e o Ansible.
-      * `sua-chave.pem`: Sua chave SSH privada.
+### 1. Provisionamento da Infraestrutura com Terraform
 
-  * **`automation/` (Código do Ansible)**
+Navegue para o diretório `lab/compute/terraform` e execute os comandos:
 
-      * `playbook.yml`: O playbook do Ansible que orquestra a instalação e a configuração do Grafana.
-      * `group_vars/grafana-servers.yml`: **Arquivo de variáveis criptografado**. Ele armazena de forma segura a senha do administrador do Grafana usando o Ansible Vault.
-      * `inventory.sh`: **Inventário dinâmico.** Este script lê o IP público da sua instância automaticamente do `terraform.tfstate`, eliminando a necessidade de um arquivo `hosts.yml` estático.
+```bash
+# Inicializa o diretório de trabalho e baixa os provedores
+cd lab/compute/terraform
+terraform init
 
------
+# Visualiza o plano de execução antes de aplicar as mudanças
+terraform plan
 
-### Fluxo de Trabalho Completo
+# Aplica as mudanças para provisionar a infraestrutura
+terraform apply --auto-approve
 
-#### Fase 1: Provisionamento da Infraestrutura com Terraform
+# Navega para o diretório do Ansible
+cd ../../.ansible/automation
 
-1.  Navegue até a pasta `compute`:
-    ```bash
-    cd compute
-    ```
-2.  Inicie o Terraform:
-    ```bash
-    terraform init
-    ```
-3.  Execute o `terraform apply` para criar a infraestrutura na AWS:
-    ```bash
-    terraform apply --auto-approve
-    ```
-    O IP público da sua instância será salvo no `terraform.tfstate`.
+# Executa o playbook usando o inventário dinâmico e a chave SSH
+ansible-playbook -i inventory.sh --private-key ../../compute/terraform/devops-pdi.pem playbook.yml
 
-#### Fase 2: Configuração com Ansible
+# Navega de volta para o diretório do Terraform
+cd ../../compute/terraform
 
-1.  Navegue até a pasta `automation`:
-    ```bash
-    cd ../automation
-    ```
-2.  Execute o playbook do Ansible:
-    ```bash
-    ansible-playbook -i inventory.sh playbook.yml --ask-vault-pass
-    ```
-      * O inventário dinâmico (`-i inventory.sh`) encontrará o IP da instância automaticamente.
-      * O `--ask-vault-pass` pedirá a senha que você usou para criptografar o arquivo `grafana-servers.yml`.
-
------
-
-### Gerenciamento de Variáveis e Senhas
-
-  * **Terraform:** As variáveis de configuração estão no `terraform.tfvars`. Para alterá-las, basta editar este arquivo.
-  * **Ansible Vault:** Para gerenciar o arquivo criptografado do Ansible:
-      * **Ver conteúdo:** `ansible-vault view group_vars/grafana-servers.yml`
-      * **Editar:** `ansible-vault edit group_vars/grafana-servers.yml`
+# Destrói toda a infraestrutura provisionada
+terraform destroy --auto-approve
