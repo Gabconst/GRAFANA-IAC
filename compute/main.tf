@@ -1,21 +1,28 @@
-resource "aws_security_group" "app_sg" {
-  name_prefix = "grafana-sg-"
-  description = "Security group for the Grafana app server"
+# Configuração do provider AWS
+provider "aws" {
+  profile = var.aws_profile
+  region  = var.aws_region
+}
+
+# Security Group para Grafana
+resource "aws_security_group" "grafana_sg" {
+  name        = "grafana-sg-${var.environment}"
+  description = "Security group for Grafana application in ${var.environment}"
 
   ingress {
-    from_port   = 22
-    to_port     = 22
+    from_port   = var.ssh_port
+    to_port     = var.ssh_port
     protocol    = "tcp"
     cidr_blocks = [var.allowed_ssh_cidr]
-    description = "Allow SSH from specific IP"
+    description = "Allow SSH access"
   }
 
   ingress {
-    from_port   = 3000
-    to_port     = 3000
+    from_port   = var.grafana_port
+    to_port     = var.grafana_port
     protocol    = "tcp"
     cidr_blocks = [var.allowed_grafana_cidr]
-    description = "Allow Grafana access"
+    description = "Allow Grafana dashboard access"
   }
 
   egress {
@@ -23,25 +30,43 @@ resource "aws_security_group" "app_sg" {
     to_port     = 0
     protocol    = "-1"
     cidr_blocks = ["0.0.0.0/0"]
+    description = "Allow all outbound traffic"
   }
 
-  tags = {
-    Name = "GRAFANA_SG"
-  }
+  tags = merge(var.tags, {
+    Name = "grafana-sg-${var.environment}"
+  })
 }
 
-resource "aws_instance" "app_server" {
-  ami             = var.ami_id
-  instance_type   = var.instance_type
-  key_name        = var.key_name
-  security_groups = [aws_security_group.app_sg.name]
-  user_data       = <<-EOT
-                #!/bin/bash
-                echo "Running provisioning script..."
-                # Este é o local para um script de provisionamento, como rodar o Ansible
-                EOT
+# Instância EC2 para Grafana
+resource "aws_instance" "grafana_server" {
+  ami                    = var.ami_id
+  instance_type          = var.instance_type
+  key_name               = var.key_name
+  vpc_security_group_ids = [aws_security_group.grafana_sg.name]
 
-  tags = {
-    Name = "GRAFANA"
-  }
+  tags = merge(var.tags, {
+    Name = "${var.instance_name}-${upper(var.environment)}"
+  })
+}
+
+# Outputs úteis
+output "grafana_instance_id" {
+  description = "ID da instância do Grafana"
+  value       = aws_instance.grafana_server.id
+}
+
+output "grafana_public_ip" {
+  description = "IP público da instância do Grafana"
+  value       = aws_instance.grafana_server.public_ip
+}
+
+output "grafana_url" {
+  description = "URL de acesso ao Grafana"
+  value       = "http://${aws_instance.grafana_server.public_ip}:${var.grafana_port}"
+}
+
+output "security_group_id" {
+  description = "ID do security group do Grafana"
+  value       = aws_security_group.grafana_sg.id
 }
