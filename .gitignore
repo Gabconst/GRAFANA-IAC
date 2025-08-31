@@ -5,7 +5,9 @@
 .tfstate files
 *.tfstate
 *.tfstate.*
-
+*.lock.hcl
+*.tfstate
+*.backup
 *.pem
 
 *.tfvars
