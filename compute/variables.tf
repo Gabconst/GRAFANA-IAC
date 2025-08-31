@@ -36,11 +36,9 @@ variable "aws_region" {
 variable "ssh_port" {
   description = "Porta SSH permitida no Security Group"
   type        = number
-  default     = 22
 }
 
 variable "grafana_port" {
   description = "Porta usada pelo Grafana"
   type        = number
-  default     = 3000
 }
