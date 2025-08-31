@@ -46,11 +46,3 @@ resource "aws_instance" "app_server" {
     Name = "GRAFANA"
   }
 }
-
-output "security_group_id" {
-  value = aws_security_group.app_sg.id
-}
-
-output "instance_ip" {
-  value = aws_instance.app_server.public_ip
-}
