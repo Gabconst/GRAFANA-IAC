@@ -19,10 +19,11 @@ resource "aws_security_group" "app_sg" {
   }
 
   egress {
-    from_port   = 0
-    to_port     = 0
-    protocol    = "-1"
-    cidr_blocks = ["0.0.0.0/0"]
+    from_port   = var.egress_from_port
+    to_port     = var.egress_to_port
+    protocol    = var.egress_protocol
+    cidr_blocks = var.egress_cidr_blocks
+    description = "Allow outbound traffic"
   }
 
   tags = {
@@ -44,4 +45,12 @@ resource "aws_instance" "app_server" {
   tags = {
     Name = "GRAFANA"
   }
+}
+
+output "security_group_id" {
+  value = aws_security_group.app_sg.id
+}
+
+output "instance_ip" {
+  value = aws_instance.app_server.public_ip
 }

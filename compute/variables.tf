@@ -42,3 +42,23 @@ variable "grafana_port" {
   description = "Porta usada pelo Grafana"
   type        = number
 }
+
+variable "egress_from_port" {
+  description = "Porta inicial para egress do Security Group"
+  type        = number
+}
+
+variable "egress_to_port" {
+  description = "Porta final para egress do Security Group"
+  type        = number
+}
+
+variable "egress_protocol" {
+  description = "Protocolo para egress do Security Group"
+  type        = string
+}
+
+variable "egress_cidr_blocks" {
+  description = "CIDR blocks para egress do Security Group"
+  type        = list(string)
+}
