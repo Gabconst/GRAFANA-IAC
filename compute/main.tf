@@ -3,16 +3,16 @@ resource "aws_security_group" "app_sg" {
   description = "Security group for the Grafana app server"
 
   ingress {
-    from_port   = 22
-    to_port     = 22
+    from_port   = ${{ secrets.SSH_PORT }}
+    to_port     = ${{ secrets.SSH_PORT }}
     protocol    = "tcp"
     cidr_blocks = [var.allowed_ssh_cidr]
     description = "Allow SSH from specific IP"
   }
 
   ingress {
-    from_port   = 3000
-    to_port     = 3000
+    from_port   = ${{ secrets.GRAFANA_PORT }}
+    to_port     = ${{ secrets.GRAFANA_PORT }}
     protocol    = "tcp"
     cidr_blocks = [var.allowed_grafana_cidr]
     description = "Allow Grafana access"

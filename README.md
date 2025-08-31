@@ -20,27 +20,38 @@ Siga a ordem dos passos para garantir o funcionamento correto do pipeline de aut
 
 ### 1. Provisionamento da Infraestrutura com Terraform
 
-Navegue para o diretório `lab/compute/terraform` e execute os comandos:
+1.  Navegue até a pasta `compute`:
+    ```bash
+    cd compute
+    ```
+2.  Inicie o Terraform:
+    ```bash
+    terraform init
+    ```
+3.  Execute o `terraform apply` para criar a infraestrutura na AWS:
+    ```bash
+    terraform apply --auto-approve
+    ```
+    O IP público da sua instância será salvo no `terraform.tfstate`.
 
-```bash
-# Inicializa o diretório de trabalho e baixa os provedores
-cd lab/compute/terraform
-terraform init
+#### Fase 2: Configuração com Ansible
 
-# Visualiza o plano de execução antes de aplicar as mudanças
-terraform plan
+1.  Navegue até a pasta `automation`:
+    ```bash
+    cd ../automation
+    ```
+2.  Execute o playbook do Ansible:
+    ```bash
+    ansible-playbook -i inventory.sh playbook.yml --ask-vault-pass
+    ```
+      * O inventário dinâmico (`-i inventory.sh`) encontrará o IP da instância automaticamente.
+      * O `--ask-vault-pass` pedirá a senha que você usou para criptografar o arquivo `grafana-servers.yml`.
 
-# Aplica as mudanças para provisionar a infraestrutura
-terraform apply --auto-approve
+-----
 
-# Navega para o diretório do Ansible
-cd ../../.ansible/automation
+### Gerenciamento de Variáveis e Senhas
 
-# Executa o playbook usando o inventário dinâmico e a chave SSH
-ansible-playbook -i inventory.sh --private-key ../../compute/terraform/devops-pdi.pem playbook.yml
-
-# Navega de volta para o diretório do Terraform
-cd ../../compute/terraform
-
-# Destrói toda a infraestrutura provisionada
-terraform destroy --auto-approve
+  * **Terraform:** As variáveis de configuração estão no `terraform.tfvars`. Para alterá-las, basta editar este arquivo.
+  * **Ansible Vault:** Para gerenciar o arquivo criptografado do Ansible:
+      * **Ver conteúdo:** `ansible-vault view group_vars/grafana-servers.yml`
+      * **Editar:** `ansible-vault edit group_vars/grafana-servers.yml`
