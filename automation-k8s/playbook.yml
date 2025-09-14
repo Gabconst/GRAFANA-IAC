@@ -47,7 +47,7 @@
         name:
           - git
           - build-essential
-          - golang-go  # Adicionado o pacote Go
+          - golang-go
         state: present
     
     - name: Clonar o repositório cri-dockerd
@@ -132,6 +132,14 @@
       ansible.builtin.command: minikube start --driver=none --apiserver-port=8443 --container-runtime=docker --network-plugin=cni --cni=calico --cpus=2 --memory=2048mb
       changed_when: true
       register: minikube_start_result
+      # Esta tarefa vai falhar propositalmente, mas vamos ignorar
+      # para seguir com a instalação do Calico
+
+    # --- Nova tarefa: Instalar o plugin de rede Calico ---
+    
+    - name: Aplicar manifesto Calico para CNI
+      ansible.builtin.command: "kubectl apply -f https://docs.tigera.io/calico/latest/manifests/calico.yaml"
+      changed_when: true
 
     - name: Exibir o resultado da inicialização do Minikube
       ansible.builtin.debug:
