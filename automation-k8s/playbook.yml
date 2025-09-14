@@ -57,8 +57,8 @@
       changed_when: true
       ignore_errors: yes
 
-    - name: Iniciar o Minikube com o driver Docker, 1 CPU e 2048 MB de memória
-      ansible.builtin.command: minikube start --driver=docker --cpus=1 --memory=2048
+    - name: Iniciar o Minikube com o driver Docker (forçando o start)
+      ansible.builtin.command: minikube start --driver=docker --cpus=1 --memory=2048 --force
       changed_when: true
       register: minikube_start_result
 
