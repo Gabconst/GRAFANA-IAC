@@ -1,0 +1,6 @@
+# Variáveis para o grupo grafana-servers
+grafana_http_addr: "0.0.0.0"
+grafana_port: 3000
+# Variáveis do Grafana
+grafana_admin_user: "admin"
+grafana_admin_password: "Devops39" # <--- Use uma senha forte

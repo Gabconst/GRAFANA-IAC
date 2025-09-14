@@ -1,0 +1,116 @@
+- name: Preparar ambiente para Kubernetes e Grafana
+  hosts: all
+  become: yes
+  vars_files:
+    - group_vars/grafana-servers.yml
+
+  tasks:
+    # --- Seção para a instalação do Minikube e Docker ---
+
+    - name: Atualizar o cache de pacotes
+      ansible.builtin.apt:
+        update_cache: yes
+      
+    - name: Instalar dependências para Minikube e Kubernetes
+      ansible.builtin.apt:
+        name:
+          - apt-transport-https
+          - software-properties-common
+          - gnupg2
+          - curl
+          - ca-certificates
+        state: present
+        update_cache: yes
+
+    - name: Instalar o Docker para o Minikube
+      ansible.builtin.apt:
+        name: docker.io
+        state: present
+      
+    - name: Adicionar o usuário atual ao grupo 'docker'
+      ansible.builtin.user:
+        name: "{{ ansible_user }}"
+        groups: docker
+        append: yes
+
+    - name: Baixar o kubectl
+      ansible.builtin.get_url:
+        url: https://dl.k8s.io/release/$(curl -L -s https://dl.k8s.io/release/stable.txt)/bin/linux/amd64/kubectl
+        dest: /usr/local/bin/kubectl
+        mode: '0755'
+
+    - name: Baixar o Minikube
+      ansible.builtin.get_url:
+        url: https://storage.googleapis.com/minikube/releases/latest/minikube-linux-amd64
+        dest: /usr/local/bin/minikube
+        mode: '0755'
+
+    - name: Iniciar o Minikube com o driver Docker
+      ansible.builtin.command: minikube start --driver=docker
+      changed_when: true
+      register: minikube_start_result
+
+    - name: Exibir o resultado da inicialização do Minikube
+      ansible.builtin.debug:
+        var: minikube_start_result.stdout_lines
+
+
+    # --- Seção para a instalação do Grafana (sem alteração) ---
+
+    - name: Parar o serviço do Grafana (se estiver rodando) para evitar conflitos
+      systemd:
+        name: grafana-server
+        state: stopped
+      ignore_errors: yes
+    
+    # ... (o resto das suas tarefas de Grafana) ...
+    - name: Adicionar chave GPG oficial do Grafana
+      ansible.builtin.apt_key:
+        url: https://apt.grafana.com/gpg.key
+        state: present
+    
+    - name: Adicionar repositório oficial do Grafana
+      ansible.builtin.apt_repository:
+        repo: "deb https://apt.grafana.com stable main"
+        state: present
+        filename: grafana.list
+      
+    - name: Instalar o Grafana
+      ansible.builtin.apt:
+        name: grafana
+        state: latest
+        update_cache: yes
+    
+    - name: Configurar Grafana para aceitar conexões externas
+      ansible.builtin.lineinfile:
+        path: /etc/grafana/grafana.ini
+        regexp: '^;http_addr ='
+        line: 'http_addr = {{ grafana_http_addr }}'
+        state: present
+        backrefs: yes
+      notify:
+        - Reiniciar Grafana
+
+    - name: Iniciar o serviço do Grafana para que o banco de dados seja inicializado
+      ansible.builtin.systemd:
+        name: grafana-server
+        state: started
+        enabled: yes
+      
+    - name: Aguardar o serviço do Grafana estar disponível na porta 3000
+      ansible.builtin.wait_for:
+        port: "{{ grafana_port }}"
+        host: "{{ ansible_host }}"
+        timeout: 120
+      
+    - name: Redefinir a senha do usuário admin
+      ansible.builtin.command: "grafana-cli admin reset-admin-password {{ grafana_admin_password }}"
+      changed_when: true
+      notify:
+        - Reiniciar Grafana
+      
+  handlers:
+    - name: Reiniciar Grafana
+      ansible.builtin.systemd:
+        name: grafana-server
+        state: restarted
