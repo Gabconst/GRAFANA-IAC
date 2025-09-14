@@ -1,236 +1,126 @@
 ---
-- name: Preparar ambiente para Kubernetes e Grafana
-  hosts: all
+- name: Deploy Kubernetes + Cri-Dockerd + Grafana
+  hosts: grafana-servers
   become: yes
   vars_files:
     - group_vars/grafana-servers.yml
 
   tasks:
-    - name: Atualizar o cache de pacotes
-      ansible.builtin.apt:
+    # --- Atualizar o sistema ---
+    - name: Atualizar pacotes do sistema
+      apt:
         update_cache: yes
+        upgrade: dist
+        cache_valid_time: 3600
 
-    - name: Instalar dependências para Minikube e Kubernetes
-      ansible.builtin.apt:
+    # --- Instalar dependências básicas ---
+    - name: Instalar pacotes necessários
+      apt:
         name:
-          - apt-transport-https
-          - software-properties-common
-          - gnupg2
           - curl
+          - wget
+          - tar
+          - apt-transport-https
           - ca-certificates
-          - conntrack
-          - git
-          - build-essential
-          - golang-go
-        state: present
-        update_cache: yes
-
-    - name: Instalar o Docker para o Minikube
-      ansible.builtin.apt:
-        name: docker.io
+          - gnupg
+          - lsb-release
         state: present
 
-    - name: Adicionar o usuário atual ao grupo 'docker'
-      ansible.builtin.user:
-        name: "{{ ansible_user }}"
-        groups: docker
-        append: yes
-
-    # --- Seção para a instalação do cri-dockerd (binário pré-compilado) ---
-
-    - name: Baixar o binário do cri-dockerd
-      ansible.builtin.get_url:
-        url: https://github.com/Mirantis/cri-dockerd/releases/download/v0.3.1/cri-dockerd-0.3.1.amd64.tgz
-        dest: /tmp/cri-dockerd.tar.gz
-
-    - name: Descompactar cri-dockerd
-      ansible.builtin.unarchive:
-        src: /tmp/cri-dockerd.tar.gz
-        dest: /tmp/
-        remote_src: yes
-
-    - name: Instalar o binário do cri-dockerd
-      ansible.builtin.copy:
-        src: /tmp/cri-dockerd/cri-dockerd
-        dest: /usr/local/bin/cri-dockerd
-        mode: '0755'
-        remote_src: yes
-
-    - name: Baixar arquivo de serviço do cri-dockerd
-      ansible.builtin.get_url:
-        url: https://raw.githubusercontent.com/Mirantis/cri-dockerd/v0.3.1/packaging/systemd/cri-dockerd.service
-        dest: /etc/systemd/system/cri-docker.service
-
-    - name: Baixar arquivo de socket do cri-dockerd
-      ansible.builtin.get_url:
-        url: https://raw.githubusercontent.com/Mirantis/cri-dockerd/v0.3.1/packaging/systemd/cri-dockerd.socket
-        dest: /etc/systemd/system/cri-docker.socket
-
-    - name: Corrigir caminho do binário no arquivo de serviço
-      ansible.builtin.lineinfile:
-        path: /etc/systemd/system/cri-docker.service
-        regexp: '^ExecStart='
-        line: 'ExecStart=/usr/local/bin/cri-dockerd --containerd=/run/containerd/containerd.sock'
-        backrefs: yes
-
-    # --- Configuração do Docker para o cgroup driver ---
-
-    - name: Criar diretório para o drop-in file do Docker
-      ansible.builtin.file:
-        path: /etc/systemd/system/docker.service.d
+    # --- Instalar cri-dockerd ---
+    - name: Criar diretório temporário para cri-dockerd
+      file:
+        path: /tmp/cri-dockerd
         state: directory
-        mode: '0755'
 
-    - name: Criar o drop-in file para o cgroup driver
-      ansible.builtin.copy:
-        content: |
-          [Service]
-          ExecStart=
-          ExecStart=/usr/bin/dockerd -H fd:// --containerd=unix:///run/containerd/containerd.sock --exec-opt=native.cgroupdriver=systemd
-        dest: /etc/systemd/system/docker.service.d/override.conf
-        mode: '0644'
-      notify:
-        - Reiniciar o Docker
+    - name: Baixar última versão do cri-dockerd
+      get_url:
+        url: "https://github.com/Mirantis/cri-dockerd/releases/download/v0.3.1/cri-dockerd-0.3.1.amd64.tgz"
+        dest: /tmp/cri-dockerd/cri-dockerd.tgz
+        validate_certs: yes
 
-    - name: Reiniciar o daemon do systemd
-      ansible.builtin.systemd:
-        daemon_reload: yes
-
-    - name: Reiniciar o serviço do Docker
-      ansible.builtin.systemd:
-        name: docker
-        state: restarted
-
-    # --- Continuação da instalação do Minikube ---
-
-    - name: Configurar o serviço do cri-dockerd
-      ansible.builtin.systemd:
-        daemon_reload: yes
-
-    - name: Habilitar e iniciar o serviço e o socket do cri-dockerd
-      ansible.builtin.systemd:
-        name: "{{ item }}"
-        state: started
-        enabled: yes
-      loop:
-        - cri-docker.service
-        - cri-docker.socket
-
-    - name: Obter a versão estável do kubectl
-      ansible.builtin.uri:
-        url: https://dl.k8s.io/release/stable.txt
-        return_content: true
-      register: kubectl_stable_version
-
-    - name: Baixar o kubectl e o kubeadm
-      ansible.builtin.get_url:
-        url: "https://dl.k8s.io/release/{{ kubectl_stable_version.content | trim }}/bin/linux/amd64/{{ item }}"
-        dest: /usr/local/bin/{{ item }}
-        mode: '0755'
-      loop:
-        - kubectl
-        - kubeadm
-
-    - name: Baixar e instalar a ferramenta crictl
-      ansible.builtin.get_url:
-        url: "https://github.com/kubernetes-sigs/cri-tools/releases/download/v1.29.0/crictl-v1.29.0-linux-amd64.tar.gz"
-        dest: /tmp/crictl.tar.gz
-
-    - name: Descompactar crictl
-      ansible.builtin.unarchive:
-        src: /tmp/crictl.tar.gz
-        dest: /usr/local/bin
+    - name: Extrair cri-dockerd
+      unarchive:
+        src: /tmp/cri-dockerd/cri-dockerd.tgz
+        dest: /usr/local/bin/
         remote_src: yes
 
-    - name: Remover o arquivo tar.gz
-      ansible.builtin.file:
-        path: /tmp/crictl.tar.gz
-        state: absent
-
-    - name: Baixar o Minikube
-      ansible.builtin.get_url:
-        url: https://storage.googleapis.com/minikube/releases/latest/minikube-linux-amd64
-        dest: /usr/local/bin/minikube
+    - name: Ajustar permissões do cri-dockerd
+      file:
+        path: /usr/local/bin/cri-dockerd
         mode: '0755'
 
-    - name: Parar e deletar qualquer Minikube existente
-      ansible.builtin.command: minikube delete
-      changed_when: true
-      ignore_errors: yes
+    # --- Configurar systemd para cri-dockerd ---
+    - name: Baixar arquivo de serviço cri-dockerd.service
+      get_url:
+        url: "https://raw.githubusercontent.com/Mirantis/cri-dockerd/main/packaging/systemd/cri-dockerd.service"
+        dest: /etc/systemd/system/cri-docker.service
+        validate_certs: yes
 
-    - name: Iniciar o Minikube com o driver none (sem VM)
-      ansible.builtin.command: minikube start --driver=none --apiserver-port=8443 --container-runtime=docker --network-plugin=cni --cni=calico --cpus=2 --memory=2048mb
-      changed_when: true
-      register: minikube_start_result
+    - name: Baixar arquivo de socket cri-dockerd.socket
+      get_url:
+        url: "https://raw.githubusercontent.com/Mirantis/cri-dockerd/main/packaging/systemd/cri-dockerd.socket"
+        dest: /etc/systemd/system/cri-docker.socket
+        validate_certs: yes
 
-    - name: Aplicar manifesto Calico para CNI
-      ansible.builtin.command: "kubectl apply -f https://docs.tigera.io/calico/latest/manifests/calico.yaml"
-      changed_when: true
+    - name: Habilitar e iniciar cri-dockerd
+      systemd:
+        name: cri-docker
+        state: started
+        enabled: yes
+        daemon_reload: yes
 
-    - name: Exibir o resultado da inicialização do Minikube
-      ansible.builtin.debug:
-        var: minikube_start_result.stdout_lines
-
-    # --- Seção para a instalação do Grafana ---
-
-    - name: Parar o serviço do Grafana (se estiver rodando) para evitar conflitos
-      ansible.builtin.systemd:
-        name: grafana-server
-        state: stopped
-      ignore_errors: yes
-
-    - name: Adicionar chave GPG oficial do Grafana
-      ansible.builtin.apt_key:
-        url: https://apt.grafana.com/gpg.key
+    # --- Instalar Kubernetes ---
+    - name: Adicionar chave GPG do Kubernetes
+      apt_key:
+        url: https://packages.cloud.google.com/apt/doc/apt-key.gpg
         state: present
 
-    - name: Adicionar repositório oficial do Grafana
-      ansible.builtin.apt_repository:
-        repo: "deb https://apt.grafana.com stable main"
+    - name: Adicionar repositório Kubernetes
+      apt_repository:
+        repo: deb http://apt.kubernetes.io/ kubernetes-xenial main
         state: present
-        filename: grafana.list
 
-    - name: Instalar o Grafana
-      ansible.builtin.apt:
-        name: grafana
-        state: latest
+    - name: Instalar kubeadm, kubelet e kubectl
+      apt:
+        name:
+          - kubelet
+          - kubeadm
+          - kubectl
+        state: present
         update_cache: yes
 
-    - name: Configurar Grafana para aceitar conexões externas
-      ansible.builtin.lineinfile:
-        path: /etc/grafana/grafana.ini
-        regexp: '^;http_addr ='
-        line: 'http_addr = {{ grafana_http_addr }}'
+    - name: Segurar versões do Kubernetes para não atualizar automaticamente
+      apt:
+        name:
+          - kubelet
+          - kubeadm
+          - kubectl
         state: present
-        backrefs: yes
-      notify:
-        - Reiniciar Grafana
+        update_cache: yes
+        allow_unauthenticated: yes
+        force: yes
 
-    - name: Iniciar o serviço do Grafana para que o banco de dados seja inicializado
-      ansible.builtin.systemd:
+    # --- Instalar Grafana ---
+    - name: Adicionar repositório Grafana
+      apt_repository:
+        repo: deb https://packages.grafana.com/oss/deb stable main
+        state: present
+        filename: grafana
+
+    - name: Adicionar chave GPG do Grafana
+      apt_key:
+        url: https://packages.grafana.com/gpg.key
+        state: present
+
+    - name: Instalar Grafana
+      apt:
+        name: grafana
+        state: present
+        update_cache: yes
+
+    - name: Habilitar e iniciar Grafana
+      systemd:
         name: grafana-server
         state: started
         enabled: yes
-
-    - name: Aguardar o serviço do Grafana estar disponível na porta 3000
-      ansible.builtin.wait_for:
-        port: "{{ grafana_port }}"
-        host: "{{ ansible_host }}"
-        timeout: 120
-
-    - name: Redefinir a senha do usuário admin
-      ansible.builtin.command: "grafana-cli admin reset-admin-password {{ grafana_admin_password }}"
-      changed_when: true
-      notify:
-        - Reiniciar Grafana
-
-  handlers:
-    - name: Reiniciar Grafana
-      ansible.builtin.systemd:
-        name: grafana-server
-        state: restarted
-
-    - name: Reiniciar o Docker
-      ansible.builtin.systemd:
-        name: docker
-        state: restarted
+        daemon_reload: yes
