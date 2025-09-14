@@ -58,7 +58,7 @@
         
     - name: Copiar os arquivos de serviço do cri-dockerd
       ansible.builtin.copy:
-        src: "/tmp/cri-dockerd/usr/local/bin/cri-dockerd.service"
+        src: "/tmp/cri-dockerd/cri-dockerd.service"
         dest: "/etc/systemd/system/cri-docker.service"
         remote_src: yes
         
@@ -71,7 +71,7 @@
 
     - name: Copiar o arquivo de socket do cri-dockerd
       ansible.builtin.copy:
-        src: "/tmp/cri-dockerd/usr/local/bin/cri-dockerd.socket"
+        src: "/tmp/cri-dockerd/cri-dockerd.socket"
         dest: "/etc/systemd/system/cri-docker.socket"
         remote_src: yes
         
