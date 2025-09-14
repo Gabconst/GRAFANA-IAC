@@ -23,11 +23,9 @@
         state: present
         update_cache: yes
     
-    - name: Instalar as ferramentas conntrack e crictl
+    - name: Instalar o pacote conntrack
       ansible.builtin.apt:
-        name:
-          - conntrack
-          - cri-tools
+        name: conntrack
         state: present
         update_cache: yes
 
@@ -53,6 +51,16 @@
         url: "https://dl.k8s.io/release/{{ kubectl_stable_version.content | trim }}/bin/linux/amd64/kubectl"
         dest: /usr/local/bin/kubectl
         mode: '0755'
+    
+    # Nova tarefa: Baixar e instalar crictl e kubeadm
+    - name: Baixar e instalar as ferramentas do Kubernetes
+      ansible.builtin.get_url:
+        url: https://dl.k8s.io/release/{{ kubectl_stable_version.content | trim }}/bin/linux/amd64/{{ item }}
+        dest: /usr/local/bin/{{ item }}
+        mode: '0755'
+      with_items:
+        - crictl
+        - kubeadm
 
     - name: Baixar o Minikube
       ansible.builtin.get_url:
@@ -82,7 +90,6 @@
         state: stopped
       ignore_errors: yes
     
-    # ... (o resto das suas tarefas de Grafana) ...
     - name: Adicionar chave GPG oficial do Grafana
       ansible.builtin.apt_key:
         url: https://apt.grafana.com/gpg.key
