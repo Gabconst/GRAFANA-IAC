@@ -1,3 +1,4 @@
+---
 - name: Preparar ambiente para Kubernetes e Grafana
   hosts: all
   become: yes
@@ -51,8 +52,13 @@
         dest: /usr/local/bin/minikube
         mode: '0755'
 
-    - name: Iniciar o Minikube com o driver Docker (e 1 CPU)
-      ansible.builtin.command: minikube start --driver=docker --cpus=1
+    - name: Parar e deletar qualquer Minikube existente
+      ansible.builtin.command: minikube delete
+      changed_when: true
+      ignore_errors: yes
+
+    - name: Iniciar o Minikube com o driver Docker, 1 CPU e 2048 MB de memória
+      ansible.builtin.command: minikube start --driver=docker --cpus=1 --memory=2048
       changed_when: true
       register: minikube_start_result
 
@@ -61,7 +67,7 @@
         var: minikube_start_result.stdout_lines
 
 
-    # --- Seção para a instalação do Grafana (sem alteração) ---
+    # --- Seção para a instalação do Grafana ---
 
     - name: Parar o serviço do Grafana (se estiver rodando) para evitar conflitos
       systemd:
