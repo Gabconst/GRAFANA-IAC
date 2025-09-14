@@ -43,10 +43,16 @@
         url: https://github.com/Mirantis/cri-dockerd/releases/download/v0.3.20/cri-dockerd-0.3.20.amd64.tgz
         dest: /tmp/cri-dockerd.tar.gz
 
-    - name: Descompactar cri-dockerd
+    - name: Criar diretório para extração do cri-dockerd
+      ansible.builtin.file:
+        path: /tmp/cri-dockerd
+        state: directory
+        mode: '0755'
+
+    - name: Descompactar cri-dockerd no diretório correto
       ansible.builtin.unarchive:
         src: /tmp/cri-dockerd.tar.gz
-        dest: /tmp/
+        dest: /tmp/cri-dockerd
         remote_src: yes
     
     - name: Instalar o binário do cri-dockerd
