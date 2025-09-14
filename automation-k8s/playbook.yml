@@ -40,6 +40,39 @@
         groups: docker
         append: yes
 
+    # --- Nova seção para a instalação do cri-dockerd ---
+    
+    - name: Instalar dependências de build para cri-dockerd
+      ansible.builtin.apt:
+        name:
+          - git
+          - build-essential
+        state: present
+
+    - name: Clonar o repositório cri-dockerd
+      ansible.builtin.git:
+        repo: 'https://github.com/Mirantis/cri-dockerd.git'
+        dest: /tmp/cri-dockerd
+
+    - name: Compilar e instalar cri-dockerd
+      ansible.builtin.command: "{{ item }}"
+      args:
+        chdir: /tmp/cri-dockerd
+      with_items:
+        - "make cri-dockerd"
+        - "sudo make install"
+      changed_when: true
+
+    - name: Configurar o serviço do cri-dockerd
+      ansible.builtin.command: "{{ item }}"
+      with_items:
+        - "sudo systemctl daemon-reload"
+        - "sudo systemctl enable cri-docker.service"
+        - "sudo systemctl enable --now cri-docker.socket"
+      changed_when: true
+      
+    # --- Continuação da instalação do Minikube ---
+
     - name: Obter a versão estável do kubectl
       ansible.builtin.uri:
         url: https://dl.k8s.io/release/stable.txt
@@ -55,7 +88,6 @@
         - kubectl
         - kubeadm
     
-    # Nova tarefa: Baixar e instalar crictl
     - name: Baixar e instalar a ferramenta crictl
       ansible.builtin.get_url:
         url: "https://github.com/kubernetes-sigs/cri-tools/releases/download/v1.29.0/crictl-v1.29.0-linux-amd64.tar.gz"
@@ -84,7 +116,7 @@
       ignore_errors: yes
 
     - name: Iniciar o Minikube com o driver none (sem VM)
-      ansible.builtin.command: minikube start --driver=none --cpus=2 --memory=2048mb
+      ansible.builtin.command: minikube start --driver=none --apiserver-port=8443 --container-runtime=docker --network-plugin=cni --cni=calico --cpus=2 --memory=2048mb
       changed_when: true
       register: minikube_start_result
 
