@@ -84,7 +84,7 @@
         content: |
           [Service]
           ExecStart=
-          ExecStart=/usr/bin/dockerd -H fd:// --containerd=/run/containerd/containerd.sock --exec-opt=native.cgroupdriver=systemd
+          ExecStart=/usr/bin/dockerd -H fd:// --containerd=unix:///run/containerd/containerd.sock --exec-opt=native.cgroupdriver=systemd
         dest: /etc/systemd/system/docker.service.d/override.conf
         mode: '0644'
       notify:
@@ -226,4 +226,8 @@
     - name: Reiniciar Grafana
       ansible.builtin.systemd:
         name: grafana-server
+        state: restarted
+    - name: Reiniciar o Docker
+      ansible.builtin.systemd:
+        name: docker
         state: restarted
