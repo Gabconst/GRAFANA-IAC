@@ -58,7 +58,7 @@
       ignore_errors: yes
 
     - name: Iniciar o Minikube com o driver none (sem VM)
-      ansible.builtin.command: minikube start --driver=none --cpus=1 --memory=900mb
+      ansible.builtin.command: minikube start --driver=none --cpus=2 --memory=2048mb
       changed_when: true
       register: minikube_start_result
 
@@ -66,10 +66,6 @@
       ansible.builtin.debug:
         var: minikube_start_result.stdout_lines
         
-    - name: Pausar por 60 segundos para estabilizar o cluster Minikube
-      ansible.builtin.pause:
-        seconds: 60
-
     # --- Seção para a instalação do Grafana ---
 
     - name: Parar o serviço do Grafana (se estiver rodando) para evitar conflitos
