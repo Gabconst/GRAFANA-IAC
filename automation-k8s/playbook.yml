@@ -46,21 +46,25 @@
         return_content: true
       register: kubectl_stable_version
 
-    - name: Baixar o kubectl
+    - name: Baixar o kubectl e o kubeadm
       ansible.builtin.get_url:
-        url: "https://dl.k8s.io/release/{{ kubectl_stable_version.content | trim }}/bin/linux/amd64/kubectl"
-        dest: /usr/local/bin/kubectl
-        mode: '0755'
-    
-    # Nova tarefa: Baixar e instalar crictl e kubeadm
-    - name: Baixar e instalar as ferramentas do Kubernetes
-      ansible.builtin.get_url:
-        url: https://dl.k8s.io/release/{{ kubectl_stable_version.content | trim }}/bin/linux/amd64/{{ item }}
+        url: "https://dl.k8s.io/release/{{ kubectl_stable_version.content | trim }}/bin/linux/amd64/{{ item }}"
         dest: /usr/local/bin/{{ item }}
         mode: '0755'
       with_items:
-        - crictl
+        - kubectl
         - kubeadm
+
+    # Nova tarefa: Baixar e instalar crictl
+    - name: Baixar e instalar a ferramenta crictl
+      ansible.builtin.get_url:
+        url: https://raw.githubusercontent.com/kubernetes-sigs/cri-tools/master/install.sh
+        dest: /tmp/install-cri.sh
+        mode: '0755'
+        
+    - name: Executar o script de instalação do crictl
+      ansible.builtin.command: /tmp/install-cri.sh
+      changed_when: true
 
     - name: Baixar o Minikube
       ansible.builtin.get_url:
