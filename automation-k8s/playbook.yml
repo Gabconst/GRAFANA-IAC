@@ -40,7 +40,7 @@
     
     - name: Baixar o binário do cri-dockerd
       ansible.builtin.get_url:
-        url: https://github.com/Mirantis/cri-dockerd/releases/download/v0.3.11/cri-dockerd-0.3.11-linux-amd64.tar.gz
+        url: https://github.com/Mirantis/cri-dockerd/releases/download/v0.3.20/cri-dockerd-0.3.20-linux-amd64.tar.gz
         dest: /tmp/cri-dockerd.tar.gz
     
     - name: Descompactar cri-dockerd
