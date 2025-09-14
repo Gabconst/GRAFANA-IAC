@@ -9,7 +9,7 @@
     - name: Atualizar o cache de pacotes
       ansible.builtin.apt:
         update_cache: yes
-      
+
     - name: Instalar dependências para Minikube e Kubernetes
       ansible.builtin.apt:
         name:
@@ -24,20 +24,18 @@
           - golang-go
         state: present
         update_cache: yes
-      
+
     - name: Instalar o Docker para o Minikube
       ansible.builtin.apt:
         name: docker.io
         state: present
-      
+
     - name: Adicionar o usuário atual ao grupo 'docker'
       ansible.builtin.user:
         name: "{{ ansible_user }}"
         groups: docker
         append: yes
 
-    # --- Seção para a instalação do cri-dockerd (binário pré-compilado) ---
-    
     - name: Baixar o binário do cri-dockerd
       ansible.builtin.get_url:
         url: https://github.com/Mirantis/cri-dockerd/releases/download/v0.3.20/cri-dockerd-0.3.20.amd64.tgz
@@ -54,20 +52,20 @@
         src: /tmp/cri-dockerd.tar.gz
         dest: /tmp/cri-dockerd
         remote_src: yes
-    
+
     - name: Instalar o binário do cri-dockerd
       ansible.builtin.copy:
         src: /tmp/cri-dockerd/cri-dockerd
         dest: /usr/local/bin/cri-dockerd
         mode: '0755'
         remote_src: yes
-        
-    - name: Copiar os arquivos de serviço do cri-dockerd
-      ansible.builtin.copy:
-        src: "/tmp/cri-dockerd/cri-dockerd.service"
-        dest: "/etc/systemd/system/cri-docker.service"
-        remote_src: yes
-        
+
+    - name: Baixar cri-dockerd.service
+      ansible.builtin.get_url:
+        url: https://raw.githubusercontent.com/Mirantis/cri-dockerd/v0.3.20/packaging/systemd/cri-dockerd.service
+        dest: /etc/systemd/system/cri-docker.service
+        mode: '0644'
+
     - name: Corrigir caminho do binário no arquivo de serviço
       ansible.builtin.lineinfile:
         path: /etc/systemd/system/cri-docker.service
@@ -75,20 +73,18 @@
         line: 'ExecStart=/usr/local/bin/cri-dockerd --containerd=/run/containerd/containerd.sock'
         backrefs: yes
 
-    - name: Copiar o arquivo de socket do cri-dockerd
-      ansible.builtin.copy:
-        src: "/tmp/cri-dockerd/cri-dockerd.socket"
-        dest: "/etc/systemd/system/cri-docker.socket"
-        remote_src: yes
-        
-    # --- Configuração do Docker para o cgroup driver ---
+    - name: Baixar cri-dockerd.socket
+      ansible.builtin.get_url:
+        url: https://raw.githubusercontent.com/Mirantis/cri-dockerd/v0.3.20/packaging/systemd/cri-dockerd.socket
+        dest: /etc/systemd/system/cri-docker.socket
+        mode: '0644'
 
     - name: Criar diretório para o drop-in file do Docker
       ansible.builtin.file:
         path: /etc/systemd/system/docker.service.d
         state: directory
         mode: '0755'
-    
+
     - name: Criar o drop-in file para o cgroup driver
       ansible.builtin.copy:
         content: |
@@ -99,7 +95,7 @@
         mode: '0644'
       notify:
         - Reiniciar o Docker
-      
+
     - name: Reiniciar o daemon do systemd
       ansible.builtin.systemd:
         daemon_reload: yes
@@ -108,13 +104,11 @@
       ansible.builtin.systemd:
         name: docker
         state: restarted
-      
-    # --- Continuação da instalação do Minikube ---
 
     - name: Configurar o serviço do cri-dockerd
       ansible.builtin.systemd:
         daemon_reload: yes
-    
+
     - name: Habilitar e iniciar o serviço e o socket do cri-dockerd
       ansible.builtin.systemd:
         name: "{{ item }}"
@@ -123,7 +117,7 @@
       with_items:
         - cri-docker.service
         - cri-docker.socket
-      
+
     - name: Obter a versão estável do kubectl
       ansible.builtin.uri:
         url: https://dl.k8s.io/release/stable.txt
@@ -138,18 +132,18 @@
       with_items:
         - kubectl
         - kubeadm
-    
+
     - name: Baixar e instalar a ferramenta crictl
       ansible.builtin.get_url:
         url: "https://github.com/kubernetes-sigs/cri-tools/releases/download/v1.29.0/crictl-v1.29.0-linux-amd64.tar.gz"
         dest: /tmp/crictl.tar.gz
-        
+
     - name: Descompactar crictl
       ansible.builtin.unarchive:
         src: /tmp/crictl.tar.gz
         dest: /usr/local/bin
         remote_src: yes
-      
+
     - name: Remover o arquivo tar.gz
       ansible.builtin.file:
         path: /tmp/crictl.tar.gz
@@ -178,32 +172,30 @@
     - name: Exibir o resultado da inicialização do Minikube
       ansible.builtin.debug:
         var: minikube_start_result.stdout_lines
-        
-    # --- Seção para a instalação do Grafana ---
 
-    - name: Parar o serviço do Grafana (se estiver rodando) para evitar conflitos
+    - name: Parar o serviço do Grafana (se estiver rodando)
       ansible.builtin.systemd:
         name: grafana-server
         state: stopped
       ignore_errors: yes
-    
+
     - name: Adicionar chave GPG oficial do Grafana
       ansible.builtin.apt_key:
         url: https://apt.grafana.com/gpg.key
         state: present
-    
+
     - name: Adicionar repositório oficial do Grafana
       ansible.builtin.apt_repository:
         repo: "deb https://apt.grafana.com stable main"
         state: present
         filename: grafana.list
-      
+
     - name: Instalar o Grafana
       ansible.builtin.apt:
         name: grafana
         state: latest
         update_cache: yes
-    
+
     - name: Configurar Grafana para aceitar conexões externas
       ansible.builtin.lineinfile:
         path: /etc/grafana/grafana.ini
@@ -214,29 +206,30 @@
       notify:
         - Reiniciar Grafana
 
-    - name: Iniciar o serviço do Grafana para que o banco de dados seja inicializado
+    - name: Iniciar o serviço do Grafana
       ansible.builtin.systemd:
         name: grafana-server
         state: started
         enabled: yes
-      
+
     - name: Aguardar o serviço do Grafana estar disponível na porta 3000
       ansible.builtin.wait_for:
         port: "{{ grafana_port }}"
         host: "{{ ansible_host }}"
         timeout: 120
-      
+
     - name: Redefinir a senha do usuário admin
       ansible.builtin.command: "grafana-cli admin reset-admin-password {{ grafana_admin_password }}"
       changed_when: true
       notify:
         - Reiniciar Grafana
-      
+
   handlers:
     - name: Reiniciar Grafana
       ansible.builtin.systemd:
         name: grafana-server
         state: restarted
+
     - name: Reiniciar o Docker
       ansible.builtin.systemd:
         name: docker
