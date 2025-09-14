@@ -70,7 +70,24 @@
         - "sudo cp packaging/systemd/cri-docker.service /etc/systemd/system/"
         - "sudo cp packaging/systemd/cri-docker.socket /etc/systemd/system/"
       changed_when: true
-    
+      
+    # --- Nova seção: Configuração do Docker para o cri-dockerd ---
+
+    - name: Configurar o serviço do Docker para usar o cri-dockerd
+      ansible.builtin.command: "sed -i 's/ExecStart=\\/usr\\/bin\\/dockerd -H fd:\\/\\/ --containerd=\\/run\\/containerd\\/containerd.sock/ExecStart=\\/usr\\/bin\\/dockerd -H fd:\\/\\/ --containerd=unix:\\/\\/\\/run\\/containerd\\/containerd.sock --exec-opt=native.cgroupdriver=systemd/g' /lib/systemd/system/docker.service"
+      changed_when: true
+
+    - name: Reiniciar o daemon do systemd
+      ansible.builtin.systemd:
+        daemon_reload: yes
+
+    - name: Reiniciar o serviço do Docker
+      ansible.builtin.systemd:
+        name: docker
+        state: restarted
+      
+    # --- Continuação da instalação do Minikube ---
+
     - name: Configurar o serviço do cri-dockerd
       ansible.builtin.systemd:
         daemon_reload: yes
@@ -84,8 +101,6 @@
         - cri-docker.service
         - cri-docker.socket
       
-    # --- Continuação da instalação do Minikube ---
-
     - name: Obter a versão estável do kubectl
       ansible.builtin.uri:
         url: https://dl.k8s.io/release/stable.txt
@@ -132,11 +147,7 @@
       ansible.builtin.command: minikube start --driver=none --apiserver-port=8443 --container-runtime=docker --network-plugin=cni --cni=calico --cpus=2 --memory=2048mb
       changed_when: true
       register: minikube_start_result
-      # Esta tarefa vai falhar propositalmente, mas vamos ignorar
-      # para seguir com a instalação do Calico
 
-    # --- Nova tarefa: Instalar o plugin de rede Calico ---
-    
     - name: Aplicar manifesto Calico para CNI
       ansible.builtin.command: "kubectl apply -f https://docs.tigera.io/calico/latest/manifests/calico.yaml"
       changed_when: true
