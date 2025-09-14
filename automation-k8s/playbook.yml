@@ -6,8 +6,6 @@
     - group_vars/grafana-servers.yml
 
   tasks:
-    # --- Seção para a instalação do Minikube e Docker ---
-
     - name: Atualizar o cache de pacotes
       ansible.builtin.apt:
         update_cache: yes
@@ -20,15 +18,13 @@
           - gnupg2
           - curl
           - ca-certificates
+          - conntrack
+          - git
+          - build-essential
+          - golang-go
         state: present
         update_cache: yes
-    
-    - name: Instalar o pacote conntrack
-      ansible.builtin.apt:
-        name: conntrack
-        state: present
-        update_cache: yes
-
+      
     - name: Instalar o Docker para o Minikube
       ansible.builtin.apt:
         name: docker.io
@@ -40,38 +36,46 @@
         groups: docker
         append: yes
 
-    # --- Seção para a instalação do cri-dockerd ---
+    # --- Seção para a instalação do cri-dockerd (binário pré-compilado) ---
     
-    - name: Instalar Go, Git e outras dependências de build para cri-dockerd
-      ansible.builtin.apt:
-        name:
-          - git
-          - build-essential
-          - golang-go
-        state: present
+    - name: Baixar o binário do cri-dockerd
+      ansible.builtin.get_url:
+        url: https://github.com/Mirantis/cri-dockerd/releases/download/v0.3.11/cri-dockerd-0.3.11-linux-amd64.tar.gz
+        dest: /tmp/cri-dockerd.tar.gz
     
-    - name: Clonar o repositório cri-dockerd
-      ansible.builtin.git:
-        repo: 'https://github.com/Mirantis/cri-dockerd.git'
-        dest: /tmp/cri-dockerd
+    - name: Descompactar cri-dockerd
+      ansible.builtin.unarchive:
+        src: /tmp/cri-dockerd.tar.gz
+        dest: /tmp/
+        remote_src: yes
+    
+    - name: Instalar o binário do cri-dockerd
+      ansible.builtin.copy:
+        src: /tmp/cri-dockerd/cri-dockerd
+        dest: /usr/local/bin/cri-dockerd
+        mode: '0755'
+        remote_src: yes
+        
+    - name: Copiar os arquivos de serviço do cri-dockerd
+      ansible.builtin.copy:
+        src: "/tmp/cri-dockerd/usr/local/bin/cri-dockerd.service"
+        dest: "/etc/systemd/system/cri-docker.service"
+        remote_src: yes
+        
+    - name: Corrigir caminho do binário no arquivo de serviço
+      ansible.builtin.lineinfile:
+        path: /etc/systemd/system/cri-docker.service
+        regexp: '^ExecStart='
+        line: 'ExecStart=/usr/local/bin/cri-dockerd --containerd=/run/containerd/containerd.sock'
+        backrefs: yes
 
-    - name: Compilar e instalar o binário cri-dockerd
-      ansible.builtin.command: make cri-dockerd
-      args:
-        chdir: /tmp/cri-dockerd
-      changed_when: true
-    
-    - name: Instalar o binário e os arquivos de serviço
-      ansible.builtin.command: "{{ item }}"
-      args:
-        chdir: /tmp/cri-dockerd
-      with_items:
-        - "sudo install -o root -g root -m 0755 cri-dockerd /usr/local/bin/cri-dockerd"
-        - "sudo cp packaging/systemd/cri-docker.service /etc/systemd/system/"
-        - "sudo cp packaging/systemd/cri-docker.socket /etc/systemd/system/"
-      changed_when: true
-      
-    # --- Nova seção: Configuração do Docker para o cri-dockerd ---
+    - name: Copiar o arquivo de socket do cri-dockerd
+      ansible.builtin.copy:
+        src: "/tmp/cri-dockerd/usr/local/bin/cri-dockerd.socket"
+        dest: "/etc/systemd/system/cri-docker.socket"
+        remote_src: yes
+        
+    # --- Configuração do Docker para o cgroup driver ---
 
     - name: Criar diretório para o drop-in file do Docker
       ansible.builtin.file:
@@ -84,7 +88,7 @@
         content: |
           [Service]
           ExecStart=
-          ExecStart=/usr/bin/dockerd -H fd:// --containerd=/run/containerd/containerd.sock --exec-opt=native.cgroupdriver=systemd
+          ExecStart=/usr/bin/dockerd -H fd:// --containerd=unix:///run/containerd/containerd.sock --exec-opt=native.cgroupdriver=systemd
         dest: /etc/systemd/system/docker.service.d/override.conf
         mode: '0644'
       notify:
