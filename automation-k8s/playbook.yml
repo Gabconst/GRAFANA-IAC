@@ -23,9 +23,11 @@
         state: present
         update_cache: yes
     
-    - name: Instalar o pacote conntrack
+    - name: Instalar as ferramentas conntrack e crictl
       ansible.builtin.apt:
-        name: conntrack
+        name:
+          - conntrack
+          - cri-tools
         state: present
         update_cache: yes
 
