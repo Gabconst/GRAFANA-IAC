@@ -51,8 +51,8 @@
         dest: /usr/local/bin/minikube
         mode: '0755'
 
-    - name: Iniciar o Minikube com o driver Docker
-      ansible.builtin.command: minikube start --driver=docker
+    - name: Iniciar o Minikube com o driver Docker (e 1 CPU)
+      ansible.builtin.command: minikube start --driver=docker --cpus=1
       changed_when: true
       register: minikube_start_result
 
