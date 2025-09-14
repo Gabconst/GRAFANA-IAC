@@ -65,7 +65,10 @@
     - name: Exibir o resultado da inicialização do Minikube
       ansible.builtin.debug:
         var: minikube_start_result.stdout_lines
-
+        
+    - name: Pausar por 60 segundos para estabilizar o cluster Minikube
+      ansible.builtin.pause:
+        seconds: 60
 
     # --- Seção para a instalação do Grafana ---
 
