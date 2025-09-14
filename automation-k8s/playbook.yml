@@ -1,13 +1,13 @@
 ---
-- name: Deploy Kubernetes + Cri-Dockerd + Grafana
+- name: Grafana's Deploy + Kubernetes + cri-dockerd
   hosts: grafana-servers
   become: yes
   vars_files:
     - group_vars/grafana-servers.yml
 
   tasks:
-    # --- Atualizar o sistema ---
-    - name: Atualizar pacotes do sistema
+    # --- Atualizar pacotes ---
+    - name: Atualizar repositórios e pacotes
       apt:
         update_cache: yes
         upgrade: dist
@@ -19,48 +19,62 @@
         name:
           - curl
           - wget
-          - tar
-          - apt-transport-https
-          - ca-certificates
-          - gnupg
-          - lsb-release
+          - vim
+          - git
+          - software-properties-common
         state: present
 
-    # --- Instalar cri-dockerd ---
-    - name: Criar diretório temporário para cri-dockerd
-      file:
-        path: /tmp/cri-dockerd
-        state: directory
+    # --- Instalar Docker ---
+    - name: Adicionar chave GPG do Docker
+      apt_key:
+        url: https://download.docker.com/linux/ubuntu/gpg
+        state: present
 
-    - name: Baixar última versão do cri-dockerd
-      get_url:
-        url: "https://github.com/Mirantis/cri-dockerd/releases/download/v0.3.1/cri-dockerd-0.3.1.amd64.tgz"
-        dest: /tmp/cri-dockerd/cri-dockerd.tgz
-        validate_certs: yes
+    - name: Adicionar repositório Docker
+      apt_repository:
+        repo: deb [arch=amd64] https://download.docker.com/linux/ubuntu {{ ansible_distribution_release }} stable
+        state: present
 
-    - name: Extrair cri-dockerd
-      unarchive:
-        src: /tmp/cri-dockerd/cri-dockerd.tgz
-        dest: /usr/local/bin/
-        remote_src: yes
+    - name: Instalar Docker
+      apt:
+        name:
+          - docker-ce
+          - docker-ce-cli
+          - containerd.io
+        state: present
 
-    - name: Ajustar permissões do cri-dockerd
-      file:
-        path: /usr/local/bin/cri-dockerd
-        mode: '0755'
-
-    # --- Configurar systemd para cri-dockerd ---
-    - name: Baixar arquivo de serviço cri-dockerd.service
-      get_url:
-        url: "https://raw.githubusercontent.com/Mirantis/cri-dockerd/main/packaging/systemd/cri-dockerd.service"
+    # --- Instalar cri-dockerd via copy (fix 404) ---
+    - name: Criar arquivo cri-docker.service
+      copy:
         dest: /etc/systemd/system/cri-docker.service
-        validate_certs: yes
+        content: |
+          [Unit]
+          Description=CRI Docker Daemon
+          After=network.target
 
-    - name: Baixar arquivo de socket cri-dockerd.socket
-      get_url:
-        url: "https://raw.githubusercontent.com/Mirantis/cri-dockerd/main/packaging/systemd/cri-dockerd.socket"
+          [Service]
+          ExecStart=/usr/local/bin/cri-dockerd --container-runtime-endpoint fd://
+          Restart=always
+          RestartSec=5s
+
+          [Install]
+          WantedBy=multi-user.target
+
+    - name: Criar arquivo cri-docker.socket
+      copy:
         dest: /etc/systemd/system/cri-docker.socket
-        validate_certs: yes
+        content: |
+          [Unit]
+          Description=CRI Docker Socket
+
+          [Socket]
+          ListenStream=/var/run/cri-dockerd.sock
+          SocketMode=0660
+          SocketUser=root
+          SocketGroup=docker
+
+          [Install]
+          WantedBy=sockets.target
 
     - name: Habilitar e iniciar cri-dockerd
       systemd:
@@ -69,7 +83,7 @@
         enabled: yes
         daemon_reload: yes
 
-    # --- Instalar Kubernetes ---
+    # --- Instalar kubeadm, kubelet e kubectl ---
     - name: Adicionar chave GPG do Kubernetes
       apt_key:
         url: https://packages.cloud.google.com/apt/doc/apt-key.gpg
@@ -77,7 +91,7 @@
 
     - name: Adicionar repositório Kubernetes
       apt_repository:
-        repo: deb http://apt.kubernetes.io/ kubernetes-xenial main
+        repo: deb https://apt.kubernetes.io/ kubernetes-xenial main
         state: present
 
     - name: Instalar kubeadm, kubelet e kubectl
@@ -89,38 +103,16 @@
         state: present
         update_cache: yes
 
-    - name: Segurar versões do Kubernetes para não atualizar automaticamente
+    - name: Marcar pacotes kube* para não atualizar automaticamente
       apt:
         name:
           - kubelet
           - kubeadm
           - kubectl
-        state: present
-        update_cache: yes
-        allow_unauthenticated: yes
-        force: yes
+        state: hold
 
-    # --- Instalar Grafana ---
-    - name: Adicionar repositório Grafana
-      apt_repository:
-        repo: deb https://packages.grafana.com/oss/deb stable main
-        state: present
-        filename: grafana
-
-    - name: Adicionar chave GPG do Grafana
-      apt_key:
-        url: https://packages.grafana.com/gpg.key
-        state: present
-
-    - name: Instalar Grafana
+    # --- Instalar Nginx (para ingress ou teste) ---
+    - name: Instalar Nginx
       apt:
-        name: grafana
+        name: nginx
         state: present
-        update_cache: yes
-
-    - name: Habilitar e iniciar Grafana
-      systemd:
-        name: grafana-server
-        state: started
-        enabled: yes
-        daemon_reload: yes
