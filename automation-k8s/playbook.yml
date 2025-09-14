@@ -36,21 +36,17 @@
         groups: docker
         append: yes
 
+    # --- Seção para a instalação do cri-dockerd (binário pré-compilado) ---
+
     - name: Baixar o binário do cri-dockerd
       ansible.builtin.get_url:
-        url: https://github.com/Mirantis/cri-dockerd/releases/download/v0.3.20/cri-dockerd-0.3.20.amd64.tgz
+        url: https://github.com/Mirantis/cri-dockerd/releases/download/v0.3.1/cri-dockerd-0.3.1.amd64.tgz
         dest: /tmp/cri-dockerd.tar.gz
 
-    - name: Criar diretório para extração do cri-dockerd
-      ansible.builtin.file:
-        path: /tmp/cri-dockerd
-        state: directory
-        mode: '0755'
-
-    - name: Descompactar cri-dockerd no diretório correto
+    - name: Descompactar cri-dockerd
       ansible.builtin.unarchive:
         src: /tmp/cri-dockerd.tar.gz
-        dest: /tmp/cri-dockerd
+        dest: /tmp/
         remote_src: yes
 
     - name: Instalar o binário do cri-dockerd
@@ -60,11 +56,15 @@
         mode: '0755'
         remote_src: yes
 
-    - name: Baixar cri-dockerd.service
+    - name: Baixar arquivo de serviço do cri-dockerd
       ansible.builtin.get_url:
-        url: https://raw.githubusercontent.com/Mirantis/cri-dockerd/v0.3.20/packaging/systemd/cri-dockerd.service
+        url: https://raw.githubusercontent.com/Mirantis/cri-dockerd/v0.3.1/packaging/systemd/cri-dockerd.service
         dest: /etc/systemd/system/cri-docker.service
-        mode: '0644'
+
+    - name: Baixar arquivo de socket do cri-dockerd
+      ansible.builtin.get_url:
+        url: https://raw.githubusercontent.com/Mirantis/cri-dockerd/v0.3.1/packaging/systemd/cri-dockerd.socket
+        dest: /etc/systemd/system/cri-docker.socket
 
     - name: Corrigir caminho do binário no arquivo de serviço
       ansible.builtin.lineinfile:
@@ -73,11 +73,7 @@
         line: 'ExecStart=/usr/local/bin/cri-dockerd --containerd=/run/containerd/containerd.sock'
         backrefs: yes
 
-    - name: Baixar cri-dockerd.socket
-      ansible.builtin.get_url:
-        url: https://raw.githubusercontent.com/Mirantis/cri-dockerd/v0.3.20/packaging/systemd/cri-dockerd.socket
-        dest: /etc/systemd/system/cri-docker.socket
-        mode: '0644'
+    # --- Configuração do Docker para o cgroup driver ---
 
     - name: Criar diretório para o drop-in file do Docker
       ansible.builtin.file:
@@ -105,6 +101,8 @@
         name: docker
         state: restarted
 
+    # --- Continuação da instalação do Minikube ---
+
     - name: Configurar o serviço do cri-dockerd
       ansible.builtin.systemd:
         daemon_reload: yes
@@ -114,7 +112,7 @@
         name: "{{ item }}"
         state: started
         enabled: yes
-      with_items:
+      loop:
         - cri-docker.service
         - cri-docker.socket
 
@@ -129,7 +127,7 @@
         url: "https://dl.k8s.io/release/{{ kubectl_stable_version.content | trim }}/bin/linux/amd64/{{ item }}"
         dest: /usr/local/bin/{{ item }}
         mode: '0755'
-      with_items:
+      loop:
         - kubectl
         - kubeadm
 
@@ -173,7 +171,9 @@
       ansible.builtin.debug:
         var: minikube_start_result.stdout_lines
 
-    - name: Parar o serviço do Grafana (se estiver rodando)
+    # --- Seção para a instalação do Grafana ---
+
+    - name: Parar o serviço do Grafana (se estiver rodando) para evitar conflitos
       ansible.builtin.systemd:
         name: grafana-server
         state: stopped
@@ -206,7 +206,7 @@
       notify:
         - Reiniciar Grafana
 
-    - name: Iniciar o serviço do Grafana
+    - name: Iniciar o serviço do Grafana para que o banco de dados seja inicializado
       ansible.builtin.systemd:
         name: grafana-server
         state: started
