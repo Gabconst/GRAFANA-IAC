@@ -22,6 +22,12 @@
           - ca-certificates
         state: present
         update_cache: yes
+    
+    - name: Instalar o pacote conntrack
+      ansible.builtin.apt:
+        name: conntrack
+        state: present
+        update_cache: yes
 
     - name: Instalar o Docker para o Minikube
       ansible.builtin.apt:
