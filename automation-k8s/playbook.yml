@@ -54,17 +54,23 @@
       with_items:
         - kubectl
         - kubeadm
-
+    
     # Nova tarefa: Baixar e instalar crictl
     - name: Baixar e instalar a ferramenta crictl
       ansible.builtin.get_url:
-        url: https://raw.githubusercontent.com/kubernetes-sigs/cri-tools/master/install.sh
-        dest: /tmp/install-cri.sh
-        mode: '0755'
+        url: "https://github.com/kubernetes-sigs/cri-tools/releases/download/v1.29.0/crictl-v1.29.0-linux-amd64.tar.gz"
+        dest: /tmp/crictl.tar.gz
         
-    - name: Executar o script de instalação do crictl
-      ansible.builtin.command: /tmp/install-cri.sh
-      changed_when: true
+    - name: Descompactar crictl
+      ansible.builtin.unarchive:
+        src: /tmp/crictl.tar.gz
+        dest: /usr/local/bin
+        remote_src: yes
+      
+    - name: Remover o arquivo tar.gz
+      ansible.builtin.file:
+        path: /tmp/crictl.tar.gz
+        state: absent
 
     - name: Baixar o Minikube
       ansible.builtin.get_url:
