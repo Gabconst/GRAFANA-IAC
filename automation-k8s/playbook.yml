@@ -40,36 +40,49 @@
         groups: docker
         append: yes
 
-    # --- Nova seção para a instalação do cri-dockerd ---
+    # --- Seção para a instalação do cri-dockerd ---
     
-    - name: Instalar dependências de build para cri-dockerd
+    - name: Instalar Go, Git e outras dependências de build para cri-dockerd
       ansible.builtin.apt:
         name:
           - git
           - build-essential
+          - golang-go  # Adicionado o pacote Go
         state: present
-
+    
     - name: Clonar o repositório cri-dockerd
       ansible.builtin.git:
         repo: 'https://github.com/Mirantis/cri-dockerd.git'
         dest: /tmp/cri-dockerd
 
-    - name: Compilar e instalar cri-dockerd
+    - name: Compilar e instalar o binário cri-dockerd
+      ansible.builtin.command: make cri-dockerd
+      args:
+        chdir: /tmp/cri-dockerd
+      changed_when: true
+    
+    - name: Instalar o binário e os arquivos de serviço
       ansible.builtin.command: "{{ item }}"
       args:
         chdir: /tmp/cri-dockerd
       with_items:
-        - "make cri-dockerd"
-        - "sudo make install"
+        - "sudo install -o root -g root -m 0755 cri-dockerd /usr/local/bin/cri-dockerd"
+        - "sudo cp packaging/systemd/cri-docker.service /etc/systemd/system/"
+        - "sudo cp packaging/systemd/cri-docker.socket /etc/systemd/system/"
       changed_when: true
-
+    
     - name: Configurar o serviço do cri-dockerd
-      ansible.builtin.command: "{{ item }}"
+      ansible.builtin.systemd:
+        daemon_reload: yes
+    
+    - name: Habilitar e iniciar o serviço e o socket do cri-dockerd
+      ansible.builtin.systemd:
+        name: "{{ item }}"
+        state: started
+        enabled: yes
       with_items:
-        - "sudo systemctl daemon-reload"
-        - "sudo systemctl enable cri-docker.service"
-        - "sudo systemctl enable --now cri-docker.socket"
-      changed_when: true
+        - cri-docker.service
+        - cri-docker.socket
       
     # --- Continuação da instalação do Minikube ---
 
@@ -127,7 +140,7 @@
     # --- Seção para a instalação do Grafana ---
 
     - name: Parar o serviço do Grafana (se estiver rodando) para evitar conflitos
-      systemd:
+      ansible.builtin.systemd:
         name: grafana-server
         state: stopped
       ignore_errors: yes
