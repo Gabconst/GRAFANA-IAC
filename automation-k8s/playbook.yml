@@ -1,83 +1,100 @@
----
-- name: Setup de servidor com Grafana + Minikube
+- name: Configurar servidor com Docker, Minikube e Grafana
   hosts: grafana-servers
   become: true
 
-  vars:
-    minikube_bin_url: "https://github.com/kubernetes/minikube/releases/latest/download/minikube-linux-amd64"
-    minikube_bin_dest: "/usr/local/bin/minikube"
-    docker_packages:
-      - docker.io
-    grafana_apt_key_url: https://packages.grafana.com/gpg.key
-    grafana_repo: "deb https://packages.grafana.com/oss/deb stable main"
+  vars_files:
+    - group_vars/grafana-servers.yml
 
   tasks:
-
-    ####### GRAFANA ########
-
-    - name: Atualiza cache do APT
+    - name: Atualiza o cache de pacotes
       apt:
         update_cache: yes
 
-    - name: Adiciona chave GPG do Grafana
-      apt_key:
-        url: "{{ grafana_apt_key_url }}"
-        state: present
-
-    - name: Adiciona repositório do Grafana
-      apt_repository:
-        repo: "{{ grafana_repo }}"
-        state: present
-
-    - name: Instala Grafana
+    - name: Instala dependências necessárias
       apt:
-        name: grafana
+        name:
+          - apt-transport-https
+          - ca-certificates
+          - curl
+          - gnupg
+          - lsb-release
         state: present
 
-    - name: Ativa e inicia serviço do Grafana
-      systemd:
-        name: grafana-server
-        enabled: true
-        state: started
+    - name: Adiciona a chave GPG oficial do Docker
+      apt_key:
+        url: https://download.docker.com/linux/ubuntu/gpg
+        state: present
 
-    ####### DOCKER + MINIKUBE ########
+    - name: Adiciona o repositório do Docker
+      apt_repository:
+        repo: deb [arch=amd64] https://download.docker.com/linux/ubuntu focal stable
+        state: present
+        filename: docker
 
     - name: Instala Docker
       apt:
-        name: "{{ docker_packages }}"
+        name:
+          - docker-ce
+          - docker-ce-cli
+          - containerd.io
         state: present
         update_cache: yes
 
-    - name: Baixa binário do Minikube
-      get_url:
-        url: "{{ minikube_bin_url }}"
-        dest: /tmp/minikube-linux-amd64
-        mode: '0755'
+    - name: Inicia e habilita o serviço do Docker
+      systemd:
+        name: docker
+        enabled: yes
+        state: started
 
-    - name: Move binário para /usr/local/bin
-      command: mv /tmp/minikube-linux-amd64 {{ minikube_bin_dest }}
-      args:
-        creates: "{{ minikube_bin_dest }}"
+    - name: Adiciona o usuário ubuntu ao grupo docker
+      user:
+        name: ubuntu
+        groups: docker
+        append: yes
 
-    - name: Garante permissão de execução no Minikube
-      file:
-        path: "{{ minikube_bin_dest }}"
-        mode: '0755'
-        owner: root
-        group: root
+    - name: [Aviso] #Requisição para novo login após adicionar ao grupo docker
+      debug:
+        msg: "AVISO: Para que o usuário 'ubuntu' tenha acesso ao Docker, é necessário sair e logar novamente na VM."
 
-    - name: Adiciona alias kubectl no .bashrc do usuário ubuntu
-      lineinfile:
-        path: /home/ubuntu/.bashrc
-        line: 'alias kubectl="minikube kubectl --"'
-        insertafter: EOF
-      become: false
-
-    - name: Inicia o cluster Minikube (Docker Driver)
-      become_user: ubuntu
-      environment:
-        CHANGE_MINIKUBE_NONE_USER: "true"
+    - name: Instala Minikube
       shell: |
-        minikube start --driver=docker || true
+        curl -LO https://github.com/kubernetes/minikube/releases/latest/download/minikube-linux-amd64
+        install minikube-linux-amd64 /usr/local/bin/minikube
+        rm minikube-linux-amd64
       args:
         executable: /bin/bash
+        creates: /usr/local/bin/minikube
+
+    - name: Inicia o cluster Minikube (Docker driver)
+      become_user: ubuntu
+      shell: |
+        minikube start --driver=docker
+      args:
+        executable: /bin/bash
+      environment:
+        CHANGE_MINIKUBE_NONE_USER: "true"
+
+    # ----------------------------
+    # AQUI CONTINUA SUA CONFIG DO GRAFANA (mantida)
+    # ----------------------------
+
+    - name: Clonar repositório do Grafana
+      git:
+        repo: "{{ grafana_repo_url }}"
+        dest: "{{ grafana_repo_dest }}"
+        version: main
+        force: yes
+        update: yes
+
+    - name: Subir containers com Docker Compose
+      shell: docker compose up -d
+      args:
+        chdir: "{{ grafana_repo_dest }}"
+
+    - name: Esperar o Grafana subir
+      wait_for:
+        host: 127.0.0.1
+        port: 3000
+        delay: 10
+        timeout: 60
+        state: started
