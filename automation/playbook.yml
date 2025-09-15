@@ -1,75 +1,83 @@
-- name: Grafana`s Deploy AWS
+---
+- name: Setup de servidor com Grafana + Minikube
   hosts: grafana-servers
-  become: yes
-  vars_files:
-    - group_vars/grafana-servers.yml
+  become: true
+
+  vars:
+    minikube_bin_url: "https://github.com/kubernetes/minikube/releases/latest/download/minikube-linux-amd64"
+    minikube_bin_dest: "/usr/local/bin/minikube"
+    docker_packages:
+      - docker.io
+    grafana_apt_key_url: https://packages.grafana.com/gpg.key
+    grafana_repo: "deb https://packages.grafana.com/oss/deb stable main"
 
   tasks:
-    - name: Parar o serviço do Grafana (se estiver rodando) para evitar conflitos
-      systemd:
-        name: grafana-server
-        state: stopped
-      ignore_errors: yes
 
-    - name: Instalar dependências necessárias e atualizar pacotes
+    ####### GRAFANA ########
+
+    - name: Atualiza cache do APT
       apt:
-        name:
-          - apt-transport-https
-          - software-properties-common
-          - gnupg2
-          - curl
-        state: present
         update_cache: yes
-        
-    - name: Adicionar chave GPG oficial do Grafana
+
+    - name: Adiciona chave GPG do Grafana
       apt_key:
-        url: https://apt.grafana.com/gpg.key
+        url: "{{ grafana_apt_key_url }}"
         state: present
 
-    - name: Adicionar repositório oficial do Grafana
+    - name: Adiciona repositório do Grafana
       apt_repository:
-        repo: "deb https://apt.grafana.com stable main"
+        repo: "{{ grafana_repo }}"
         state: present
-        filename: grafana.list
-      
-    - name: Instalar o Grafana
+
+    - name: Instala Grafana
       apt:
         name: grafana
-        state: latest
+        state: present
+
+    - name: Ativa e inicia serviço do Grafana
+      systemd:
+        name: grafana-server
+        enabled: true
+        state: started
+
+    ####### DOCKER + MINIKUBE ########
+
+    - name: Instala Docker
+      apt:
+        name: "{{ docker_packages }}"
+        state: present
         update_cache: yes
 
-    - name: Configurar Grafana para aceitar conexões externas
+    - name: Baixa binário do Minikube
+      get_url:
+        url: "{{ minikube_bin_url }}"
+        dest: /tmp/minikube-linux-amd64
+        mode: '0755'
+
+    - name: Move binário para /usr/local/bin
+      command: mv /tmp/minikube-linux-amd64 {{ minikube_bin_dest }}
+      args:
+        creates: "{{ minikube_bin_dest }}"
+
+    - name: Garante permissão de execução no Minikube
+      file:
+        path: "{{ minikube_bin_dest }}"
+        mode: '0755'
+        owner: root
+        group: root
+
+    - name: Adiciona alias kubectl no .bashrc do usuário ubuntu
       lineinfile:
-        path: /etc/grafana/grafana.ini
-        regexp: '^;http_addr ='
-        line: 'http_addr = {{ grafana_http_addr }}'
-        state: present
-        backrefs: yes
-      notify:
-        - Reiniciar Grafana
+        path: /home/ubuntu/.bashrc
+        line: 'alias kubectl="minikube kubectl --"'
+        insertafter: EOF
+      become: false
 
-    - name: Iniciar o serviço do Grafana para que o banco de dados seja inicializado
-      systemd:
-        name: grafana-server
-        state: started
-        enabled: yes
-      
-    - name: Aguardar o serviço do Grafana estar disponível na porta 3000
-      wait_for:
-        port: "{{ grafana_port }}"
-        host: "{{ ansible_host }}"
-        timeout: 120
-      
-    - name: Redefinir a senha do usuário admin
-      command: "grafana-cli admin reset-admin-password {{ grafana_admin_password }}"
-      changed_when: true
-      notify:
-        - Reiniciar Grafana
-      
-  handlers:
-    - name: Reiniciar Grafana
-      systemd:
-        name: grafana-server
-        state: restarted
-
-##
+    - name: Inicia o cluster Minikube (Docker Driver)
+      become_user: ubuntu
+      environment:
+        CHANGE_MINIKUBE_NONE_USER: "true"
+      shell: |
+        minikube start --driver=docker || true
+      args:
+        executable: /bin/bash
