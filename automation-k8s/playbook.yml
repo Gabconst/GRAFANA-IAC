@@ -1,118 +1,57 @@
 ---
-- name: Grafana's Deploy + Kubernetes + cri-dockerd
+- name: Setup Minikube em Linux (x86-64)
   hosts: grafana-servers
-  become: yes
-  vars_files:
-    - group_vars/grafana-servers.yml
+  become: true
+  vars:
+    minikube_bin_url: "https://github.com/kubernetes/minikube/releases/latest/download/minikube-linux-amd64"
+    minikube_bin_dest: "/usr/local/bin/minikube"
+    docker_packages:
+      - docker.io
 
   tasks:
-    # --- Atualizar pacotes ---
-    - name: Atualizar repositórios e pacotes
+
+    - name: Atualiza o cache de pacotes
       apt:
         update_cache: yes
-        upgrade: dist
         cache_valid_time: 3600
 
-    # --- Instalar dependências básicas ---
-    - name: Instalar pacotes necessários
+    - name: Instala o Docker
       apt:
-        name:
-          - curl
-          - wget
-          - vim
-          - git
-          - software-properties-common
+        name: "{{ docker_packages }}"
         state: present
 
-    # --- Instalar Docker ---
-    - name: Adicionar chave GPG do Docker
-      apt_key:
-        url: https://download.docker.com/linux/ubuntu/gpg
-        state: present
+    - name: Baixa o binário do Minikube
+      get_url:
+        url: "{{ minikube_bin_url }}"
+        dest: /tmp/minikube-linux-amd64
+        mode: '0755'
 
-    - name: Adicionar repositório Docker
-      apt_repository:
-        repo: deb [arch=amd64] https://download.docker.com/linux/ubuntu {{ ansible_distribution_release }} stable
-        state: present
+    - name: Move o binário do Minikube para /usr/local/bin
+      command: mv /tmp/minikube-linux-amd64 {{ minikube_bin_dest }}
+      args:
+        creates: "{{ minikube_bin_dest }}"
 
-    - name: Instalar Docker
-      apt:
-        name:
-          - docker-ce
-          - docker-ce-cli
-          - containerd.io
-        state: present
+    - name: Garante permissão de execução ao Minikube
+      file:
+        path: "{{ minikube_bin_dest }}"
+        mode: '0755'
+        owner: root
+        group: root
 
-    # --- Instalar cri-dockerd via copy (fix 404) ---
-    - name: Criar arquivo cri-docker.service
-      copy:
-        dest: /etc/systemd/system/cri-docker.service
-        content: |
-          [Unit]
-          Description=CRI Docker Daemon
-          After=network.target
+    - name: Cria alias kubectl="minikube kubectl --"
+      lineinfile:
+        path: /home/ubuntu/.bashrc
+        line: 'alias kubectl="minikube kubectl --"'
+        create: yes
+        insertafter: EOF
+      become: false
 
-          [Service]
-          ExecStart=/usr/local/bin/cri-dockerd --container-runtime-endpoint fd://
-          Restart=always
-          RestartSec=5s
-
-          [Install]
-          WantedBy=multi-user.target
-
-    - name: Criar arquivo cri-docker.socket
-      copy:
-        dest: /etc/systemd/system/cri-docker.socket
-        content: |
-          [Unit]
-          Description=CRI Docker Socket
-
-          [Socket]
-          ListenStream=/var/run/cri-dockerd.sock
-          SocketMode=0660
-          SocketUser=root
-          SocketGroup=docker
-
-          [Install]
-          WantedBy=sockets.target
-
-    - name: Habilitar e iniciar cri-dockerd
-      systemd:
-        name: cri-docker
-        state: started
-        enabled: yes
-        daemon_reload: yes
-
-    # --- Instalar kubeadm, kubelet e kubectl ---
-    - name: Adicionar chave GPG do Kubernetes
-      apt_key:
-        url: https://packages.cloud.google.com/apt/doc/apt-key.gpg
-        state: present
-
-    - name: Adicionar repositório Kubernetes
-      apt_repository:
-        repo: deb https://apt.kubernetes.io/ kubernetes-xenial main
-        state: present
-
-    - name: Instalar kubeadm, kubelet e kubectl
-      apt:
-        name:
-          - kubelet
-          - kubeadm
-          - kubectl
-        state: present
-        update_cache: yes
-
-    - name: Marcar pacotes kube* para não atualizar automaticamente
-      apt:
-        name:
-          - kubelet
-          - kubeadm
-          - kubectl
-        state: hold
-
-    # --- Instalar Nginx (para ingress ou teste) ---
-    - name: Instalar Nginx
-      apt:
-        name: nginx
-        state: present
+    - name: Informa o usuário sobre como iniciar o cluster
+      debug:
+        msg: |
+          Minikube instalado com sucesso! Agora execute manualmente:
+            $ minikube start
+          E para usar o kubectl:
+            $ kubectl get po -A
+            ou
+            $ minikube kubectl -- get po -A
