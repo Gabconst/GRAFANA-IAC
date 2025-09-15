@@ -1,95 +1,58 @@
 ---
-- name: Setup completo com Docker, Minikube e Grafana
-  hosts: grafana-servers
-  become: true
-  tasks:
-    # Atualiza os pacotes
-    - name: Atualiza os pacotes do sistema
-      apt:
-        update_cache: yes
-        upgrade: yes
+- name: Configurar cluster EKS
+  hosts: localhost
+  connection: local
+  gather_facts: no
 
-    # Instala dependências essenciais
-    - name: Instala dependências do sistema
-      apt:
-        name:
-          - curl
-          - wget
-          - apt-transport-https
-          - ca-certificates
-          - gnupg
-          - software-properties-common
+  vars:
+    kubeconfig_path: "~/.kube/config"  # Caminho do kubeconfig gerado pelo Terraform/EKS
+    grafana_namespace: "grafana"
+    grafana_release_name: "grafana"
+    grafana_chart: "grafana/grafana"
+    grafana_chart_version: "6.56.2"  # exemplo, pode atualizar
+    grafana_values_file: "./grafana-values.yml"
+
+  tasks:
+
+    - name: Instalar kubectl
+      ansible.builtin.package:
+        name: kubectl
         state: present
 
-    # Instala o Docker
-    - name: Instala Docker Engine
-      shell: |
-        curl -fsSL https://get.docker.com | sh
-      args:
-        executable: /bin/bash
+    - name: Instalar Helm
+      ansible.builtin.package:
+        name: helm
+        state: present
 
-    # Adiciona o usuário ao grupo docker
-    - name: Adiciona o usuário 'ubuntu' ao grupo 'docker'
-      user:
-        name: ubuntu
-        groups: docker
-        append: yes
+    - name: Configurar contexto do kubectl
+      community.kubernetes.k8s_auth:
+        kubeconfig: "{{ kubeconfig_path }}"
 
-    # Instala o Minikube
-    - name: Baixa o binário do Minikube
-      get_url:
-        url: https://github.com/kubernetes/minikube/releases/latest/download/minikube-linux-amd64
-        dest: /usr/local/bin/minikube
-        mode: '0755'
+    - name: Criar namespace do Grafana
+      community.kubernetes.k8s:
+        api_version: v1
+        kind: Namespace
+        name: "{{ grafana_namespace }}"
+        state: present
+        kubeconfig: "{{ kubeconfig_path }}"
 
-    # Instala o kubectl via Minikube (opcional)
-    - name: Instala alias para kubectl via Minikube
-      copy:
-        dest: /etc/profile.d/kubectl.sh
-        content: |
-          alias kubectl="minikube kubectl --"
+    - name: Deploy Grafana via Helm
+      community.kubernetes.helm:
+        name: "{{ grafana_release_name }}"
+        chart_ref: "{{ grafana_chart }}"
+        chart_version: "{{ grafana_chart_version }}"
+        release_namespace: "{{ grafana_namespace }}"
+        values_file: "{{ grafana_values_file }}"
+        kubeconfig: "{{ kubeconfig_path }}"
+        state: present
 
-    # Aviso: login necessário para ativar grupo docker
-    - name: "[AVISO] É necessário fazer logout/login antes de iniciar o Minikube"
-      debug:
-        msg: |
-          O usuário 'ubuntu' foi adicionado ao grupo 'docker', mas precisa RELOGAR para que isso funcione.
-          Após o login, execute manualmente:
-            minikube start --driver=docker
-          Isso inicializará o cluster com driver Docker.
+    - name: Verificar pods do Grafana
+      community.kubernetes.k8s_info:
+        kind: Pod
+        namespace: "{{ grafana_namespace }}"
+        kubeconfig: "{{ kubeconfig_path }}"
+      register: grafana_pods
 
-    # GRAFANA - Instala Docker Compose
-    - name: Instala Docker Compose
-      get_url:
-        url: https://github.com/docker/compose/releases/download/v2.24.6/docker-compose-linux-x86_64
-        dest: /usr/local/bin/docker-compose
-        mode: '0755'
-
-    # GRAFANA - Cria diretório
-    - name: Cria diretório para Grafana
-      file:
-        path: /opt/grafana
-        state: directory
-
-    # GRAFANA - Copia docker-compose.yml
-    - name: Copia arquivo docker-compose.yml do Grafana
-      copy:
-        dest: /opt/grafana/docker-compose.yml
-        content: |
-          version: '3'
-          services:
-            grafana:
-              image: grafana/grafana
-              ports:
-                - "3000:3000"
-              volumes:
-                - grafana-storage:/var/lib/grafana
-          volumes:
-            grafana-storage:
-
-    # GRAFANA - Sobe o container com docker-compose
-    - name: Sobe o Grafana com docker-compose
-      shell: docker-compose up -d
-      args:
-        chdir: /opt/grafana
-
+    - name: Mostrar status dos pods do Grafana
+      ansible.builtin.debug:
+        msg: "{{ grafana_pods.resources | map(attribute='metadata.name') | list }}"
