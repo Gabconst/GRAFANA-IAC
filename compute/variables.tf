@@ -1,79 +1,66 @@
-variable "cluster_name" {
-  description = "Nome do cluster EKS"
+variable "ami_id" {
+  description = "ID da AMI para a instância EC2"
   type        = string
 }
 
-variable "cluster_role_arn" {
-  description = "ARN da IAM Role usada pelo cluster"
+variable "instance_type" {
+  description = "Tipo da instância EC2"
   type        = string
 }
 
-variable "k8s_version" {
-  description = "Versão do Kubernetes para o cluster"
+variable "key_name" {
+  description = "Nome da chave SSH para a instância EC2"
   type        = string
 }
 
-variable "subnet_ids" {
-  description = "Lista de Subnet IDs onde o cluster será criado"
+variable "allowed_ssh_cidr" {
+  description = "CIDR block to allow SSH access from"
+  type        = string
+}
+
+variable "allowed_grafana_cidr" {
+  description = "CIDR block to allow Grafana access from"
+  type        = string
+}
+
+variable "aws_profile" {
+  description = "Perfil da AWS a ser usado"
+  type        = string
+}
+
+variable "aws_region" {
+  description = "Região da AWS a ser usada"
+  type        = string
+}
+
+variable "ssh_port" {
+  description = "Porta SSH permitida no Security Group"
+  type        = number
+}
+
+variable "grafana_port" {
+  description = "Porta usada pelo Grafana"
+  type        = number
+}
+
+variable "egress_from_port" {
+  description = "Porta inicial para egress do Security Group"
+  type        = number
+}
+
+variable "egress_to_port" {
+  description = "Porta final para egress do Security Group"
+  type        = number
+}
+
+variable "egress_protocol" {
+  description = "Protocolo para egress do Security Group"
+  type        = string
+}
+
+variable "egress_cidr_blocks" {
+  description = "CIDR blocks para egress do Security Group"
   type        = list(string)
 }
 
-variable "endpoint_private_access" {
-  description = "Habilitar acesso privado ao endpoint do EKS"
-  type        = bool
-}
-
-variable "endpoint_public_access" {
-  description = "Habilitar acesso público ao endpoint do EKS"
-  type        = bool
-}
-
-variable "tags" {
-  description = "Tags a serem aplicadas no cluster"
-  type        = map(string)
-}
-
-variable "node_group_name" {
-  description = "Nome do node group"
-  type        = string
-}
-
-variable "node_role_arn" {
-  description = "ARN da IAM Role dos nodes"
-  type        = string
-}
-
-variable "desired_capacity" {
-  description = "Número desejado de nodes"
-  type        = number
-}
-
-variable "max_size" {
-  description = "Número máximo de nodes"
-  type        = number
-}
-
-variable "min_size" {
-  description = "Número mínimo de nodes"
-  type        = number
-}
-
-variable "instance_types" {
-  description = "Tipos de instância para o node group"
-  type        = list(string)
-}
-
-variable "node_disk_size" {
-  description = "Tamanho do disco dos nodes"
-  type        = number
-}
-
-variable "ami_type" {
-  description = "AMI type dos nodes (ex: AL2_x86_64)"
-  type        = string
-}
-
-variable "node_tags" {
-  description = "Tags a serem aplicadas nos nodes"
-  type        = map(string)
-}
+##
