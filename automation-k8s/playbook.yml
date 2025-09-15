@@ -52,7 +52,7 @@
         groups: docker
         append: yes
 
-    - name: [Aviso] #Requisição para novo login após adicionar ao grupo docker
+    - name: Aviso Requisição para novo login após adicionar ao grupo docker
       debug:
         msg: "AVISO: Para que o usuário 'ubuntu' tenha acesso ao Docker, é necessário sair e logar novamente na VM."
 
