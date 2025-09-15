@@ -1,58 +1,83 @@
 ---
-- name: Configurar cluster EKS
-  hosts: localhost
-  connection: local
-  gather_facts: no
+- name: Setup de servidor com Grafana + Minikube
+  hosts: grafana-servers
+  become: true
 
   vars:
-    kubeconfig_path: "~/.kube/config"  # Caminho do kubeconfig gerado pelo Terraform/EKS
-    grafana_namespace: "grafana"
-    grafana_release_name: "grafana"
-    grafana_chart: "grafana/grafana"
-    grafana_chart_version: "6.56.2"  # exemplo, pode atualizar
-    grafana_values_file: "./grafana-values.yml"
+    minikube_bin_url: "https://github.com/kubernetes/minikube/releases/latest/download/minikube-linux-amd64"
+    minikube_bin_dest: "/usr/local/bin/minikube"
+    docker_packages:
+      - docker.io
+    grafana_apt_key_url: https://packages.grafana.com/gpg.key
+    grafana_repo: "deb https://packages.grafana.com/oss/deb stable main"
 
   tasks:
 
-    - name: Instalar kubectl
-      ansible.builtin.package:
-        name: kubectl
+    ####### GRAFANA ########
+
+    - name: Atualiza cache do APT
+      apt:
+        update_cache: yes
+
+    - name: Adiciona chave GPG do Grafana
+      apt_key:
+        url: "{{ grafana_apt_key_url }}"
         state: present
 
-    - name: Instalar Helm
-      ansible.builtin.package:
-        name: helm
+    - name: Adiciona repositório do Grafana
+      apt_repository:
+        repo: "{{ grafana_repo }}"
         state: present
 
-    - name: Configurar contexto do kubectl
-      community.kubernetes.k8s_auth:
-        kubeconfig: "{{ kubeconfig_path }}"
-
-    - name: Criar namespace do Grafana
-      community.kubernetes.k8s:
-        api_version: v1
-        kind: Namespace
-        name: "{{ grafana_namespace }}"
-        state: present
-        kubeconfig: "{{ kubeconfig_path }}"
-
-    - name: Deploy Grafana via Helm
-      community.kubernetes.helm:
-        name: "{{ grafana_release_name }}"
-        chart_ref: "{{ grafana_chart }}"
-        chart_version: "{{ grafana_chart_version }}"
-        release_namespace: "{{ grafana_namespace }}"
-        values_file: "{{ grafana_values_file }}"
-        kubeconfig: "{{ kubeconfig_path }}"
+    - name: Instala Grafana
+      apt:
+        name: grafana
         state: present
 
-    - name: Verificar pods do Grafana
-      community.kubernetes.k8s_info:
-        kind: Pod
-        namespace: "{{ grafana_namespace }}"
-        kubeconfig: "{{ kubeconfig_path }}"
-      register: grafana_pods
+    - name: Ativa e inicia serviço do Grafana
+      systemd:
+        name: grafana-server
+        enabled: true
+        state: started
 
-    - name: Mostrar status dos pods do Grafana
-      ansible.builtin.debug:
-        msg: "{{ grafana_pods.resources | map(attribute='metadata.name') | list }}"
+    ####### DOCKER + MINIKUBE ########
+
+    - name: Instala Docker
+      apt:
+        name: "{{ docker_packages }}"
+        state: present
+        update_cache: yes
+
+    - name: Baixa binário do Minikube
+      get_url:
+        url: "{{ minikube_bin_url }}"
+        dest: /tmp/minikube-linux-amd64
+        mode: '0755'
+
+    - name: Move binário para /usr/local/bin
+      command: mv /tmp/minikube-linux-amd64 {{ minikube_bin_dest }}
+      args:
+        creates: "{{ minikube_bin_dest }}"
+
+    - name: Garante permissão de execução no Minikube
+      file:
+        path: "{{ minikube_bin_dest }}"
+        mode: '0755'
+        owner: root
+        group: root
+
+    - name: Adiciona alias kubectl no .bashrc do usuário ubuntu
+      lineinfile:
+        path: /home/ubuntu/.bashrc
+        line: 'alias kubectl="minikube kubectl --"'
+        insertafter: EOF
+      become: false
+
+    - name: Inicia o cluster Minikube (Docker Driver)
+      become_user: ubuntu
+      environment:
+        CHANGE_MINIKUBE_NONE_USER: "true"
+      shell: |
+        minikube start --driver=docker || true
+      args:
+        executable: /bin/bash
