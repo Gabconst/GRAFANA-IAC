@@ -1,100 +1,95 @@
-- name: Configurar servidor com Docker, Minikube e Grafana
+---
+- name: Setup completo com Docker, Minikube e Grafana
   hosts: grafana-servers
   become: true
-
-  vars_files:
-    - group_vars/grafana-servers.yml
-
   tasks:
-    - name: Atualiza o cache de pacotes
+    # Atualiza os pacotes
+    - name: Atualiza os pacotes do sistema
       apt:
         update_cache: yes
+        upgrade: yes
 
-    - name: Instala dependências necessárias
+    # Instala dependências essenciais
+    - name: Instala dependências do sistema
       apt:
         name:
+          - curl
+          - wget
           - apt-transport-https
           - ca-certificates
-          - curl
           - gnupg
-          - lsb-release
+          - software-properties-common
         state: present
 
-    - name: Adiciona a chave GPG oficial do Docker
-      apt_key:
-        url: https://download.docker.com/linux/ubuntu/gpg
-        state: present
+    # Instala o Docker
+    - name: Instala Docker Engine
+      shell: |
+        curl -fsSL https://get.docker.com | sh
+      args:
+        executable: /bin/bash
 
-    - name: Adiciona o repositório do Docker
-      apt_repository:
-        repo: deb [arch=amd64] https://download.docker.com/linux/ubuntu focal stable
-        state: present
-        filename: docker
-
-    - name: Instala Docker
-      apt:
-        name:
-          - docker-ce
-          - docker-ce-cli
-          - containerd.io
-        state: present
-        update_cache: yes
-
-    - name: Inicia e habilita o serviço do Docker
-      systemd:
-        name: docker
-        enabled: yes
-        state: started
-
-    - name: Adiciona o usuário ubuntu ao grupo docker
+    # Adiciona o usuário ao grupo docker
+    - name: Adiciona o usuário 'ubuntu' ao grupo 'docker'
       user:
         name: ubuntu
         groups: docker
         append: yes
 
-    - name: Aviso Requisição para novo login após adicionar ao grupo docker
+    # Instala o Minikube
+    - name: Baixa o binário do Minikube
+      get_url:
+        url: https://github.com/kubernetes/minikube/releases/latest/download/minikube-linux-amd64
+        dest: /usr/local/bin/minikube
+        mode: '0755'
+
+    # Instala o kubectl via Minikube (opcional)
+    - name: Instala alias para kubectl via Minikube
+      copy:
+        dest: /etc/profile.d/kubectl.sh
+        content: |
+          alias kubectl="minikube kubectl --"
+
+    # Aviso: login necessário para ativar grupo docker
+    - name: "[AVISO] É necessário fazer logout/login antes de iniciar o Minikube"
       debug:
-        msg: "AVISO: Para que o usuário 'ubuntu' tenha acesso ao Docker, é necessário sair e logar novamente na VM."
+        msg: |
+          O usuário 'ubuntu' foi adicionado ao grupo 'docker', mas precisa RELOGAR para que isso funcione.
+          Após o login, execute manualmente:
+            minikube start --driver=docker
+          Isso inicializará o cluster com driver Docker.
 
-    - name: Instala Minikube
-      shell: |
-        curl -LO https://github.com/kubernetes/minikube/releases/latest/download/minikube-linux-amd64
-        install minikube-linux-amd64 /usr/local/bin/minikube
-        rm minikube-linux-amd64
+    # GRAFANA - Instala Docker Compose
+    - name: Instala Docker Compose
+      get_url:
+        url: https://github.com/docker/compose/releases/download/v2.24.6/docker-compose-linux-x86_64
+        dest: /usr/local/bin/docker-compose
+        mode: '0755'
+
+    # GRAFANA - Cria diretório
+    - name: Cria diretório para Grafana
+      file:
+        path: /opt/grafana
+        state: directory
+
+    # GRAFANA - Copia docker-compose.yml
+    - name: Copia arquivo docker-compose.yml do Grafana
+      copy:
+        dest: /opt/grafana/docker-compose.yml
+        content: |
+          version: '3'
+          services:
+            grafana:
+              image: grafana/grafana
+              ports:
+                - "3000:3000"
+              volumes:
+                - grafana-storage:/var/lib/grafana
+          volumes:
+            grafana-storage:
+
+    # GRAFANA - Sobe o container com docker-compose
+    - name: Sobe o Grafana com docker-compose
+      shell: docker-compose up -d
       args:
-        executable: /bin/bash
-        creates: /usr/local/bin/minikube
+        chdir: /opt/grafana
 
-    - name: Inicia o cluster Minikube (Docker driver)
-      become_user: ubuntu
-      shell: |
-        minikube start --driver=docker
-      args:
-        executable: /bin/bash
-      environment:
-        CHANGE_MINIKUBE_NONE_USER: "true"
-
-    # ----------------------------
-    # AQUI CONTINUA SUA CONFIG DO GRAFANA (mantida)
-    # ----------------------------
-
-    - name: Clonar repositório do Grafana
-      git:
-        repo: "{{ grafana_repo_url }}"
-        dest: "{{ grafana_repo_dest }}"
-        version: main
-        force: yes
-        update: yes
-
-    - name: Subir containers com Docker Compose
-      shell: docker compose up -d
-      args:
-        chdir: "{{ grafana_repo_dest }}"
-
-    - name: Esperar o Grafana subir
-      wait_for:
-        host: 127.0.0.1
-        port: 3000
-        delay: 10
-        timeout: 60
-        state: started
