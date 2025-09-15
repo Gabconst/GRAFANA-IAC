@@ -1,30 +1,50 @@
-resource "aws_eks_cluster" "this" {
-  name     = var.cluster_name
-  role_arn = var.cluster_role_arn
-  version  = var.k8s_version
+resource "aws_security_group" "app_sg" {
+  name_prefix = "grafana-sg-"
+  description = "Security group for the Grafana app server"
 
-  vpc_config {
-    subnet_ids = var.subnet_ids
-    endpoint_private_access = var.endpoint_private_access
-    endpoint_public_access  = var.endpoint_public_access
+  ingress {
+    from_port   = var.ssh_port
+    to_port     = var.ssh_port
+    protocol    = "tcp"
+    cidr_blocks = [var.allowed_ssh_cidr]
+    description = "Allow SSH from specific IP"
   }
 
-  tags = var.tags
-}
-
-resource "aws_eks_node_group" "this" {
-  cluster_name    = aws_eks_cluster.this.name
-  node_group_name = var.node_group_name
-  node_role_arn   = var.node_role_arn
-  subnet_ids      = var.subnet_ids
-  scaling_config {
-    desired_size = var.desired_capacity
-    max_size     = var.max_size
-    min_size     = var.min_size
+  ingress {
+    from_port   = var.grafana_port
+    to_port     = var.grafana_port
+    protocol    = "tcp"
+    cidr_blocks = [var.allowed_grafana_cidr]
+    description = "Allow Grafana access"
   }
 
-  instance_types = var.instance_types
-  disk_size      = var.node_disk_size
-  ami_type       = var.ami_type
-  tags           = var.node_tags
+  egress {
+    from_port   = var.egress_from_port
+    to_port     = var.egress_to_port
+    protocol    = var.egress_protocol
+    cidr_blocks = var.egress_cidr_blocks
+    description = "Allow outbound traffic"
+  }
+
+  tags = {
+    Name = "GRAFANA_SG"
+  }
 }
+
+resource "aws_instance" "app_server" {
+  ami             = var.ami_id
+  instance_type   = var.instance_type
+  key_name        = var.key_name
+  security_groups = [aws_security_group.app_sg.name]
+  user_data       = <<-EOT
+                #!/bin/bash
+                echo "Running provisioning script..."
+                # Este é o local para um script de provisionamento, como rodar o Ansible
+                EOT
+
+  tags = {
+    Name = "GRAFANA"
+  }
+}
+
+##
