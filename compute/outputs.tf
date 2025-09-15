@@ -1,19 +1,11 @@
-output "cluster_name" {
-  description = "Nome do cluster EKS"
-  value       = aws_eks_cluster.this.name
+output "instance_ip" {
+  description = "IP público da instância EC2"
+  value       = aws_instance.app_server.public_ip
 }
 
-output "cluster_endpoint" {
-  description = "Endpoint do cluster EKS"
-  value       = aws_eks_cluster.this.endpoint
+output "security_group_id" {
+  description = "ID do Security Group criado"
+  value       = aws_security_group.app_sg.id
 }
 
-output "node_group_name" {
-  description = "Nome do node group"
-  value       = aws_eks_node_group.this.node_group_name
-}
-
-output "node_instance_role" {
-  description = "IAM Role ARN dos nodes"
-  value       = aws_eks_node_group.this.node_role_arn
-}
+##
