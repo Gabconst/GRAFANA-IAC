@@ -1,6 +1,6 @@
 ---
-- name: Setup de servidor com Grafana + Minikube
-  hosts: grafana-servers
+- name: Setup de servidor com Minikube + Docker
+  hosts: grafana-servers  # pode renomear o grupo se quiser
   become: true
 
   vars:
@@ -8,56 +8,34 @@
     minikube_bin_dest: "/usr/local/bin/minikube"
     docker_packages:
       - docker.io
-    grafana_apt_key_url: https://packages.grafana.com/gpg.key
-    grafana_repo: "deb https://packages.grafana.com/oss/deb stable main"
 
   tasks:
 
-    ####### GRAFANA ########
-
+    ####### ATUALIZAÇÃO E DEPENDÊNCIAS ########
     - name: Atualiza cache do APT
       apt:
         update_cache: yes
+        cache_valid_time: 3600
 
-    - name: Adiciona chave GPG do Grafana
-      apt_key:
-        url: "{{ grafana_apt_key_url }}"
-        state: present
-
-    - name: Adiciona repositório do Grafana
-      apt_repository:
-        repo: "{{ grafana_repo }}"
-        state: present
-
-    - name: Instala Grafana
-      apt:
-        name: grafana
-        state: present
-
-    - name: Ativa e inicia serviço do Grafana
-      systemd:
-        name: grafana-server
-        enabled: true
-        state: started
-
-    ####### DOCKER + MINIKUBE ########
-
-    - name: Instala Docker
+    - name: Instala pacotes necessários
       apt:
         name: "{{ docker_packages }}"
         state: present
-        update_cache: yes
 
+    ####### MINIKUBE ########
     - name: Baixa binário do Minikube
       get_url:
         url: "{{ minikube_bin_url }}"
         dest: /tmp/minikube-linux-amd64
         mode: '0755'
+        force: yes
 
     - name: Move binário para /usr/local/bin
-      command: mv /tmp/minikube-linux-amd64 {{ minikube_bin_dest }}
-      args:
-        creates: "{{ minikube_bin_dest }}"
+      copy:
+        src: /tmp/minikube-linux-amd64
+        dest: "{{ minikube_bin_dest }}"
+        remote_src: yes
+        mode: '0755'
 
     - name: Garante permissão de execução no Minikube
       file:
@@ -73,7 +51,7 @@
         insertafter: EOF
       become: false
 
-    - name: Inicia o cluster Minikube (Docker Driver)
+    - name: Inicia o cluster Minikube (Docker driver)
       become_user: ubuntu
       environment:
         CHANGE_MINIKUBE_NONE_USER: "true"
