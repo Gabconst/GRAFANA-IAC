@@ -63,4 +63,13 @@ variable "egress_cidr_blocks" {
   type        = list(string)
 }
 
-##
+# <<< NOVO: volume root parametrizado totalmente pelo módulo pai
+variable "root_volume_size" {
+  description = "Tamanho do volume root da instância EC2 em GB"
+  type        = number
+}
+
+variable "root_volume_type" {
+  description = "Tipo do volume root da instância EC2 (gp2, gp3, io1, etc)"
+  type        = string
+}

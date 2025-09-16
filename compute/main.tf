@@ -42,9 +42,14 @@ resource "aws_instance" "app_server" {
                 # Este é o local para um script de provisionamento, como rodar o Ansible
                 EOT
 
+
+  root_block_device {
+    volume_size           = var.root_volume_size
+    volume_type           = var.root_volume_type
+    delete_on_termination = true
+  }
+
   tags = {
-    Name = "GRAFANA"
+    Name = "K8s-Machine"
   }
 }
-
-##
