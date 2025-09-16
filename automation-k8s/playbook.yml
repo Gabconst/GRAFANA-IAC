@@ -75,7 +75,7 @@
 
     - name: Verifica se Minikube está ativo
       become_user: ubuntu
-      shell: minikube status --format '{{.Host}}'
+      shell: 'minikube status --format={{"{{.Host}}"}}'
       register: minikube_status
       ignore_errors: yes
 
@@ -84,7 +84,7 @@
       environment:
         CHANGE_MINIKUBE_NONE_USER: "true"
       shell: minikube start --driver=docker --cpus=2 --memory=4g
-      when: minikube_status.stdout != "Running"
+      when: minikube_status is defined and minikube_status.stdout != "Running"
 
     ####### PYTHON + K8S ########
 
@@ -120,18 +120,21 @@
 
     - name: Aplica ConfigMap no Kubernetes
       become_user: ubuntu
-      shell: minikube kubectl -- apply -f /home/ubuntu/k8s/configmap.yaml
+      shell: |
+        minikube kubectl -- apply -f /home/ubuntu/k8s/configmap.yaml
       args:
         executable: /bin/bash
 
     - name: Aplica Deployment no Kubernetes
       become_user: ubuntu
-      shell: minikube kubectl -- apply -f /home/ubuntu/k8s/deployment.yaml
+      shell: |
+        minikube kubectl -- apply -f /home/ubuntu/k8s/deployment.yaml
       args:
         executable: /bin/bash
 
     - name: Aplica Service no Kubernetes
       become_user: ubuntu
-      shell: minikube kubectl -- apply -f /home/ubuntu/k8s/service.yaml
+      shell: |
+        minikube kubectl -- apply -f /home/ubuntu/k8s/service.yaml
       args:
         executable: /bin/bash
