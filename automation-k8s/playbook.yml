@@ -12,7 +12,6 @@
   tasks:
 
     ####### SISTEMA & DEPENDÊNCIAS ########
-
     - name: Atualiza cache do APT e faz upgrade
       apt:
         update_cache: yes
@@ -33,7 +32,6 @@
         update_cache: yes
 
     ####### DOCKER + MINIKUBE ########
-
     - name: Instala Docker
       apt:
         name: "{{ docker_packages }}"
@@ -71,12 +69,21 @@
         line: 'alias kubectl="minikube kubectl --"'
         insertafter: EOF
 
-    ####### INICIA MINIKUBE ########
+    - name: Define alias kubectl temporariamente para uso imediato
+      become_user: ubuntu
+      shell: 'alias kubectl="minikube kubectl --"'
 
+    ####### INICIA MINIKUBE ########
     - name: Verifica se Minikube está ativo
       become_user: ubuntu
       shell: 'minikube status --format={{"{{.Host}}"}}'
       register: minikube_status
+      ignore_errors: yes
+
+    - name: Deleta Minikube travado (opcional)
+      become_user: ubuntu
+      shell: minikube delete
+      when: minikube_status is defined and minikube_status.stdout != "Running"
       ignore_errors: yes
 
     - name: Inicia Minikube se não estiver ativo
@@ -84,10 +91,9 @@
       environment:
         CHANGE_MINIKUBE_NONE_USER: "true"
       shell: minikube start --driver=docker --cpus=2 --memory=4g
-      when: minikube_status is defined and minikube_status.stdout != "Running"
+      when: minikube_status is not defined or minikube_status.stdout != "Running"
 
     ####### PYTHON + K8S ########
-
     - name: Instala biblioteca kubernetes do Python
       pip:
         name: kubernetes
@@ -95,7 +101,6 @@
         extra_args: --break-system-packages
 
     ####### NGINX ########
-
     - name: Instala NGINX
       apt:
         name: nginx
@@ -117,24 +122,27 @@
         enabled: yes
 
     ####### KUBERNETES MANIFESTS ########
+    - name: Cria pasta /home/ubuntu/k8s na VM
+      file:
+        path: /home/ubuntu/k8s
+        state: directory
+        owner: ubuntu
+        group: ubuntu
+        mode: '0755'
 
-    - name: Aplica ConfigMap no Kubernetes
+    - name: Copia todos os manifests do Kubernetes para a VM
+      copy:
+        src: "{{ item }}"
+        dest: /home/ubuntu/k8s/
+        owner: ubuntu
+        group: ubuntu
+        mode: '0644'
+      with_fileglob:
+        - files/k8s/*.yaml
       become_user: ubuntu
-      shell: |
-        minikube kubectl -- apply -f /home/ubuntu/k8s/configmap.yaml
-      args:
-        executable: /bin/bash
 
-    - name: Aplica Deployment no Kubernetes
+    - name: Aplica todos os manifests do Kubernetes
       become_user: ubuntu
-      shell: |
-        minikube kubectl -- apply -f /home/ubuntu/k8s/deployment.yaml
-      args:
-        executable: /bin/bash
-
-    - name: Aplica Service no Kubernetes
-      become_user: ubuntu
-      shell: |
-        minikube kubectl -- apply -f /home/ubuntu/k8s/service.yaml
+      shell: minikube kubectl -- apply -f /home/ubuntu/k8s/
       args:
         executable: /bin/bash
