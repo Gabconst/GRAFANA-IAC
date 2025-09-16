@@ -2,7 +2,6 @@
 - name: Setup completo de EC2 com Minikube, K8s e NGINX
   hosts: grafana-servers  # pode renomear o grupo se quiser
   become: true
-
   vars:
     minikube_bin_url: "https://github.com/kubernetes/minikube/releases/latest/download/minikube-linux-amd64"
     minikube_bin_dest: "/usr/local/bin/minikube"
@@ -16,7 +15,7 @@
 
   tasks:
 
-    ####### ATUALIZAÇÃO E DEPENDÊNCIAS ########
+    ####### DOCKER ########
     - name: Atualiza cache do APT
       apt:
         update_cache: yes
@@ -65,7 +64,21 @@
       args:
         executable: /bin/bash
 
-    ####### CONFIGMAP ########
+    ####### DEPENDÊNCIAS PYTHON PARA k8s ########
+    - name: Instala pip e dependências Python
+      apt:
+        name:
+          - python3-pip
+          - python3-setuptools
+        state: present
+        update_cache: yes
+
+    - name: Instala biblioteca kubernetes do Python
+      pip:
+        name: kubernetes
+        executable: pip3
+
+    ####### K8S: CONFIGMAP ########
     - name: Cria ConfigMap do app
       kubernetes.core.k8s:
         state: present
@@ -79,7 +92,7 @@
             APP_ENV: "dev"
             APP_DEBUG: "true"
 
-    ####### POD ########
+    ####### K8S: POD ########
     - name: Cria Pod do app
       kubernetes.core.k8s:
         state: present
@@ -101,7 +114,7 @@
                   - configMapRef:
                       name: app-config
 
-    ####### SERVICE ########
+    ####### K8S: SERVICE ########
     - name: Cria Service do app
       kubernetes.core.k8s:
         state: present
