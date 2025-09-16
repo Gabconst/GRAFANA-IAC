@@ -1,45 +1,53 @@
 ---
-- name: Setup completo de EC2 com Minikube, K8s e NGINX
-  hosts: grafana-servers  # pode renomear o grupo se quiser
+- name: Setup de servidor com Minikube
+  hosts: grafana-servers
   become: true
+
   vars:
     minikube_bin_url: "https://github.com/kubernetes/minikube/releases/latest/download/minikube-linux-amd64"
     minikube_bin_dest: "/usr/local/bin/minikube"
     docker_packages:
       - docker.io
-    kube_namespace: default
-    app_service_name: app-service
-    app_service_port: 80
-    nginx_conf_path: /etc/nginx/sites-available/app-proxy.conf
-    nginx_conf_link: /etc/nginx/sites-enabled/app-proxy.conf
 
   tasks:
 
-    ####### DOCKER ########
     - name: Atualiza cache do APT
       apt:
         update_cache: yes
-        cache_valid_time: 3600
+        upgrade: dist
 
-    - name: Instala pacotes necessários
+    - name: Instala dependências básicas
+      apt:
+        name:
+          - curl
+          - wget
+          - git
+          - apt-transport-https
+          - ca-certificates
+          - software-properties-common
+          - python3-pip
+          - python3-venv
+        state: present
+        update_cache: yes
+
+    ####### DOCKER + MINIKUBE ########
+
+    - name: Instala Docker
       apt:
         name: "{{ docker_packages }}"
         state: present
+        update_cache: yes
 
-    ####### MINIKUBE ########
     - name: Baixa binário do Minikube
       get_url:
         url: "{{ minikube_bin_url }}"
         dest: /tmp/minikube-linux-amd64
         mode: '0755'
-        force: yes
 
     - name: Move binário para /usr/local/bin
-      copy:
-        src: /tmp/minikube-linux-amd64
-        dest: "{{ minikube_bin_dest }}"
-        remote_src: yes
-        mode: '0755'
+      command: mv /tmp/minikube-linux-amd64 {{ minikube_bin_dest }}
+      args:
+        creates: "{{ minikube_bin_dest }}"
 
     - name: Garante permissão de execução no Minikube
       file:
@@ -48,14 +56,14 @@
         owner: root
         group: root
 
-    - name: Adiciona alias kubectl no .bashrc do usuário ubuntu
+    - name: Cria alias kubectl no .bashrc do usuário ubuntu
+      become_user: ubuntu
       lineinfile:
         path: /home/ubuntu/.bashrc
         line: 'alias kubectl="minikube kubectl --"'
         insertafter: EOF
-      become: false
 
-    - name: Inicia o cluster Minikube (Docker driver)
+    - name: Inicia o cluster Minikube (driver Docker)
       become_user: ubuntu
       environment:
         CHANGE_MINIKUBE_NONE_USER: "true"
@@ -64,109 +72,10 @@
       args:
         executable: /bin/bash
 
-    ####### DEPENDÊNCIAS PYTHON PARA k8s ########
-    - name: Instala pip e dependências Python
-      apt:
-        name:
-          - python3-pip
-          - python3-setuptools
-        state: present
-        update_cache: yes
+    ####### PYTHON + K8S ########
 
-    - name: Instala biblioteca kubernetes do Python
+    - name: Instala biblioteca kubernetes do Python (Ubuntu 24.04 fix)
       pip:
         name: kubernetes
         executable: pip3
-
-    ####### K8S: CONFIGMAP ########
-    - name: Cria ConfigMap do app
-      kubernetes.core.k8s:
-        state: present
-        definition:
-          apiVersion: v1
-          kind: ConfigMap
-          metadata:
-            name: app-config
-            namespace: "{{ kube_namespace }}"
-          data:
-            APP_ENV: "dev"
-            APP_DEBUG: "true"
-
-    ####### K8S: POD ########
-    - name: Cria Pod do app
-      kubernetes.core.k8s:
-        state: present
-        definition:
-          apiVersion: v1
-          kind: Pod
-          metadata:
-            name: app-pod
-            namespace: "{{ kube_namespace }}"
-            labels:
-              app: app-container
-          spec:
-            containers:
-              - name: app-container
-                image: nginx:latest   # substitua pela sua imagem
-                ports:
-                  - containerPort: 80
-                envFrom:
-                  - configMapRef:
-                      name: app-config
-
-    ####### K8S: SERVICE ########
-    - name: Cria Service do app
-      kubernetes.core.k8s:
-        state: present
-        definition:
-          apiVersion: v1
-          kind: Service
-          metadata:
-            name: "{{ app_service_name }}"
-            namespace: "{{ kube_namespace }}"
-          spec:
-            selector:
-              app: app-container
-            ports:
-              - protocol: TCP
-                port: "{{ app_service_port }}"
-                targetPort: 80
-            type: ClusterIP
-
-    ####### NGINX ########
-    - name: Instala NGINX
-      apt:
-        name: nginx
-        state: present
-        update_cache: yes
-
-    - name: Cria configuração do NGINX para proxy reverso
-      copy:
-        dest: "{{ nginx_conf_path }}"
-        content: |
-          server {
-              listen 80;
-
-              location / {
-                  proxy_pass http://127.0.0.1:{{ app_service_port }};
-                  proxy_set_header Host $host;
-                  proxy_set_header X-Real-IP $remote_addr;
-                  proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
-                  proxy_set_header X-Forwarded-Proto $scheme;
-              }
-          }
-      notify: Restart NGINX
-
-    - name: Ativa configuração do site
-      file:
-        src: "{{ nginx_conf_path }}"
-        dest: "{{ nginx_conf_link }}"
-        state: link
-      notify: Restart NGINX
-
-  handlers:
-    - name: Restart NGINX
-      systemd:
-        name: nginx
-        state: restarted
-        enabled: yes
+        extra_args: --break-system-packages
