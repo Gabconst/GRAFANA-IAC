@@ -1,5 +1,5 @@
 ---
-- name: Setup de servidor com Minikube
+- name: Setup completo de servidor com Minikube + NGINX + K8s
   hosts: grafana-servers
   become: true
 
@@ -11,7 +11,9 @@
 
   tasks:
 
-    - name: Atualiza cache do APT
+    ####### SISTEMA & DEPENDÊNCIAS ########
+
+    - name: Atualiza cache do APT e faz upgrade
       apt:
         update_cache: yes
         upgrade: dist
@@ -37,6 +39,12 @@
         name: "{{ docker_packages }}"
         state: present
         update_cache: yes
+
+    - name: Adiciona usuário ubuntu ao grupo docker
+      user:
+        name: ubuntu
+        groups: docker
+        append: yes
 
     - name: Baixa binário do Minikube
       get_url:
@@ -68,14 +76,59 @@
       environment:
         CHANGE_MINIKUBE_NONE_USER: "true"
       shell: |
-        minikube start --driver=docker || true
+        minikube start --driver=docker --cpus=2 --memory=4g || true
       args:
         executable: /bin/bash
 
     ####### PYTHON + K8S ########
 
-    - name: Instala biblioteca kubernetes do Python (Ubuntu 24.04 fix)
+    - name: Instala biblioteca kubernetes do Python
       pip:
         name: kubernetes
         executable: pip3
         extra_args: --break-system-packages
+
+    ####### NGINX ########
+
+    - name: Instala NGINX
+      apt:
+        name: nginx
+        state: present
+        update_cache: yes
+
+    - name: Copia arquivo nginx.conf
+      copy:
+        src: files/nginx.conf
+        dest: /etc/nginx/nginx.conf
+        owner: root
+        group: root
+        mode: '0644'
+
+    - name: Reinicia NGINX
+      service:
+        name: nginx
+        state: restarted
+        enabled: yes
+
+    ####### KUBERNETES MANIFESTS ########
+
+    - name: Aplica ConfigMap no Kubernetes
+      become_user: ubuntu
+      shell: |
+        minikube kubectl -- apply -f /home/ubuntu/k8s/configmap.yaml
+      args:
+        executable: /bin/bash
+
+    - name: Aplica Deployment no Kubernetes
+      become_user: ubuntu
+      shell: |
+        minikube kubectl -- apply -f /home/ubuntu/k8s/deployment.yaml
+      args:
+        executable: /bin/bash
+
+    - name: Aplica Service no Kubernetes
+      become_user: ubuntu
+      shell: |
+        minikube kubectl -- apply -f /home/ubuntu/k8s/service.yaml
+      args:
+        executable: /bin/bash
