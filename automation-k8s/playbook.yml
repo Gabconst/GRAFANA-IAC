@@ -1,5 +1,5 @@
 ---
-- name: Setup de servidor com Minikube + Docker
+- name: Setup completo de EC2 com Minikube, K8s e NGINX
   hosts: grafana-servers  # pode renomear o grupo se quiser
   become: true
 
@@ -8,6 +8,11 @@
     minikube_bin_dest: "/usr/local/bin/minikube"
     docker_packages:
       - docker.io
+    kube_namespace: default
+    app_service_name: app-service
+    app_service_port: 80
+    nginx_conf_path: /etc/nginx/sites-available/app-proxy.conf
+    nginx_conf_link: /etc/nginx/sites-enabled/app-proxy.conf
 
   tasks:
 
@@ -59,3 +64,96 @@
         minikube start --driver=docker || true
       args:
         executable: /bin/bash
+
+    ####### CONFIGMAP ########
+    - name: Cria ConfigMap do app
+      kubernetes.core.k8s:
+        state: present
+        definition:
+          apiVersion: v1
+          kind: ConfigMap
+          metadata:
+            name: app-config
+            namespace: "{{ kube_namespace }}"
+          data:
+            APP_ENV: "dev"
+            APP_DEBUG: "true"
+
+    ####### POD ########
+    - name: Cria Pod do app
+      kubernetes.core.k8s:
+        state: present
+        definition:
+          apiVersion: v1
+          kind: Pod
+          metadata:
+            name: app-pod
+            namespace: "{{ kube_namespace }}"
+            labels:
+              app: app-container
+          spec:
+            containers:
+              - name: app-container
+                image: nginx:latest   # substitua pela sua imagem
+                ports:
+                  - containerPort: 80
+                envFrom:
+                  - configMapRef:
+                      name: app-config
+
+    ####### SERVICE ########
+    - name: Cria Service do app
+      kubernetes.core.k8s:
+        state: present
+        definition:
+          apiVersion: v1
+          kind: Service
+          metadata:
+            name: "{{ app_service_name }}"
+            namespace: "{{ kube_namespace }}"
+          spec:
+            selector:
+              app: app-container
+            ports:
+              - protocol: TCP
+                port: "{{ app_service_port }}"
+                targetPort: 80
+            type: ClusterIP
+
+    ####### NGINX ########
+    - name: Instala NGINX
+      apt:
+        name: nginx
+        state: present
+        update_cache: yes
+
+    - name: Cria configuração do NGINX para proxy reverso
+      copy:
+        dest: "{{ nginx_conf_path }}"
+        content: |
+          server {
+              listen 80;
+
+              location / {
+                  proxy_pass http://127.0.0.1:{{ app_service_port }};
+                  proxy_set_header Host $host;
+                  proxy_set_header X-Real-IP $remote_addr;
+                  proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+                  proxy_set_header X-Forwarded-Proto $scheme;
+              }
+          }
+      notify: Restart NGINX
+
+    - name: Ativa configuração do site
+      file:
+        src: "{{ nginx_conf_path }}"
+        dest: "{{ nginx_conf_link }}"
+        state: link
+      notify: Restart NGINX
+
+  handlers:
+    - name: Restart NGINX
+      systemd:
+        name: nginx
+        state: restarted
+        enabled: yes
