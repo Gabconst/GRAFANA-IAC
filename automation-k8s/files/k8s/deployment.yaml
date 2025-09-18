@@ -21,7 +21,7 @@ spec:
             - containerPort: 80
           envFrom:
             - configMapRef:
-                name: nginx-app-config
+                name: nginx-env-vars   # Aponta para o ConfigMap correto
           volumeMounts:
             - name: nginx-config
               mountPath: /etc/nginx/nginx.conf
