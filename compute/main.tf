@@ -27,7 +27,7 @@ resource "aws_security_group" "app_sg" {
   }
 
   tags = {
-    Name = "GRAFANA_SG"
+    Name = "devops_seclist"
   }
 }
 
@@ -50,6 +50,6 @@ resource "aws_instance" "app_server" {
   }
 
   tags = {
-    Name = "K8s-Machine"
+    Name = "kubernets-machine"
   }
 }

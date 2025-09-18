@@ -31,7 +31,7 @@ data:
             listen 80;
 
             location / {
-                return 200 'Olá, Minikube!';
+                return 200 'Olá, DevOps!';
                 add_header Content-Type text/plain;
             }
         }

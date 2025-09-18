@@ -5,4 +5,4 @@ metadata:
   labels:
     app: nginx-proxy
 data:
-  mensagem: "Olá, Minikube!"
+  mensagem: "Olá, DevOps!"
