@@ -4,8 +4,6 @@
   become: true
 
   vars:
-    minikube_bin_url: "https://github.com/kubernetes/minikube/releases/latest/download/minikube-linux-amd64"
-    minikube_bin_dest: "/usr/local/bin/minikube"
     docker_packages:
       - docker.io
 
@@ -32,7 +30,7 @@
         state: present
         update_cache: yes
 
-    ####### DOCKER + MINIKUBE ########
+    ####### DOCKER ########
 
     - name: Instala Docker
       apt:
@@ -46,20 +44,22 @@
         groups: docker
         append: yes
 
+    ####### MINIKUBE ########
+    # Todas as tarefas relacionadas ao Minikube permanecem intactas
     - name: Baixa binário do Minikube
       get_url:
-        url: "{{ minikube_bin_url }}"
+        url: "https://github.com/kubernetes/minikube/releases/latest/download/minikube-linux-amd64"
         dest: /tmp/minikube-linux-amd64
         mode: '0755'
 
     - name: Move binário para /usr/local/bin
-      command: mv /tmp/minikube-linux-amd64 {{ minikube_bin_dest }}
+      command: mv /tmp/minikube-linux-amd64 /usr/local/bin/minikube
       args:
-        creates: "{{ minikube_bin_dest }}"
+        creates: /usr/local/bin/minikube
 
     - name: Garante permissão de execução no Minikube
       file:
-        path: "{{ minikube_bin_dest }}"
+        path: /usr/local/bin/minikube
         mode: '0755'
         owner: root
         group: root
@@ -70,8 +70,6 @@
         path: /home/ubuntu/.bashrc
         line: 'alias kubectl="minikube kubectl --"'
         insertafter: EOF
-
-    ####### INICIA MINIKUBE ########
 
     - name: Verifica se Minikube está ativo
       become_user: ubuntu
@@ -109,17 +107,12 @@
 
     - name: Copia arquivo nginx.conf
       copy:
-        src: files/nginx.conf
+        src: "{{ playbook_dir }}/files/k8s/nginx.conf"
         dest: /etc/nginx/nginx.conf
         owner: root
         group: root
         mode: '0644'
-
-    - name: Reinicia NGINX
-      service:
-        name: nginx
-        state: restarted
-        enabled: yes
+      notify: Reinicia NGINX
 
     ####### KUBERNETES MANIFESTS ########
 
@@ -133,7 +126,7 @@
 
     - name: Copia manifests do repositório para a VM
       copy:
-        src: files/k8s/
+        src: "{{ playbook_dir }}/files/k8s/"
         dest: /home/ubuntu/k8s/
         owner: ubuntu
         group: ubuntu
@@ -142,10 +135,15 @@
       become_user: ubuntu
 
     - name: Aplica todos os manifests do Kubernetes
+      community.kubernetes.k8s:
+        kubeconfig: /home/ubuntu/.kube/config
+        state: present
+        src: /home/ubuntu/k8s/
       become_user: ubuntu
-      shell: |
-        for f in /home/ubuntu/k8s/*.yaml; do
-          minikube kubectl -- apply -f "$f"
-        done
-      args:
-        executable: /bin/bash
+
+  handlers:
+    - name: Reinicia NGINX
+      service:
+        name: nginx
+        state: restarted
+        enabled: yes
