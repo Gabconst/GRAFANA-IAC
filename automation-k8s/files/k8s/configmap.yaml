@@ -1,6 +1,8 @@
 apiVersion: v1
 kind: ConfigMap
 metadata:
-  name: exemplo-config
+  name: nginx-env-vars
+  labels:
+    app: nginx-proxy
 data:
   mensagem: "Olá, Minikube!"

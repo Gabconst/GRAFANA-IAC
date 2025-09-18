@@ -1,22 +1,51 @@
 apiVersion: apps/v1
 kind: Deployment
 metadata:
-  name: exemplo-deployment
+  name: nginx-proxy-deployment
+  labels:
+    app: nginx-proxy
 spec:
   replicas: 2
   selector:
     matchLabels:
-      app: exemplo
+      app: nginx-proxy
   template:
     metadata:
       labels:
-        app: exemplo
+        app: nginx-proxy
     spec:
       containers:
-        - name: exemplo-container
-          image: nginx:latest
+        - name: nginx-proxy
+          image: nginx:1.25.3
           ports:
             - containerPort: 80
           envFrom:
             - configMapRef:
-                name: exemplo-config
+                name: nginx-env-vars
+          volumeMounts:
+            - name: nginx-config
+              mountPath: /etc/nginx/nginx.conf
+              subPath: nginx.conf
+          resources:
+            limits:
+              memory: "128Mi"
+              cpu: "500m"
+            requests:
+              memory: "64Mi"
+              cpu: "250m"
+          readinessProbe:
+            httpGet:
+              path: /
+              port: 80
+            initialDelaySeconds: 5
+            periodSeconds: 10
+          livenessProbe:
+            httpGet:
+              path: /
+              port: 80
+            initialDelaySeconds: 10
+            periodSeconds: 15
+      volumes:
+        - name: nginx-config
+          configMap:
+            name: nginx-custom-conf
