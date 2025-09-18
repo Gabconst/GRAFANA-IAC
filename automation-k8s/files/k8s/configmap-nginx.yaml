@@ -31,12 +31,8 @@ data:
             listen 80;
 
             location / {
-                # Corrigido: nome do Service existente no cluster
-                proxy_pass http://nginx-env-vars-service:80;
-                proxy_set_header Host $host;
-                proxy_set_header X-Real-IP $remote_addr;
-                proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
-                proxy_set_header X-Forwarded-Proto $scheme;
+                return 200 'Olá, Minikube!';
+                add_header Content-Type text/plain;
             }
         }
     }
