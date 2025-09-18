@@ -1,7 +1,7 @@
 apiVersion: apps/v1
 kind: Deployment
 metadata:
-  name: nginx-proxy-deployment
+  name: nginx-env-vars
   labels:
     app: nginx-proxy
 spec:
