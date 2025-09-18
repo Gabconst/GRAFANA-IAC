@@ -10,7 +10,6 @@
   tasks:
 
     ####### SISTEMA & DEPENDÊNCIAS ########
-
     - name: Atualiza cache do APT e faz upgrade
       apt:
         update_cache: yes
@@ -31,7 +30,6 @@
         update_cache: yes
 
     ####### DOCKER ########
-
     - name: Instala Docker
       apt:
         name: "{{ docker_packages }}"
@@ -45,7 +43,6 @@
         append: yes
 
     ####### MINIKUBE ########
-    # Todas as tarefas relacionadas ao Minikube permanecem intactas
     - name: Baixa binário do Minikube
       get_url:
         url: "https://github.com/kubernetes/minikube/releases/latest/download/minikube-linux-amd64"
@@ -90,7 +87,6 @@
       when: minikube_status is defined and minikube_status.stdout != "Running"
 
     ####### PYTHON + K8S ########
-
     - name: Instala biblioteca kubernetes do Python
       pip:
         name: kubernetes
@@ -98,7 +94,6 @@
         extra_args: --break-system-packages
 
     ####### NGINX ########
-
     - name: Instala NGINX
       apt:
         name: nginx
@@ -115,7 +110,6 @@
       notify: Reinicia NGINX
 
     ####### KUBERNETES MANIFESTS ########
-
     - name: Cria pasta /home/ubuntu/k8s na VM
       file:
         path: /home/ubuntu/k8s
@@ -134,12 +128,14 @@
         remote_src: no
       become_user: ubuntu
 
-    - name: Aplica todos os manifests do Kubernetes
-      community.kubernetes.k8s:
-        kubeconfig: /home/ubuntu/.kube/config
-        state: present
-        src: /home/ubuntu/k8s/
+    - name: Aplica todos os manifests do Kubernetes via CLI
       become_user: ubuntu
+      shell: |
+        for f in /home/ubuntu/k8s/*.yaml; do
+          minikube kubectl -- apply -f "$f"
+        done
+      args:
+        executable: /bin/bash
 
   handlers:
     - name: Reinicia NGINX
