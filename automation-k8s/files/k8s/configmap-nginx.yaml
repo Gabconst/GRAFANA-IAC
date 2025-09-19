@@ -30,9 +30,19 @@ data:
         server {
             listen 80;
 
-            location / {
+            # Resposta padrão na raiz
+            location = / {
                 return 200 'Olá, DevOps!';
                 add_header Content-Type text/plain;
+            }
+
+            # Proxy reverso para Prometheus via /prometheus
+            location /prometheus/ {
+                proxy_pass http://prometheus-service:9090/;
+                proxy_set_header Host $host;
+                proxy_set_header X-Real-IP $remote_addr;
+                proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+                proxy_set_header X-Forwarded-Proto $scheme;
             }
         }
     }
