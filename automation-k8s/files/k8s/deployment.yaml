@@ -21,7 +21,7 @@ spec:
             - containerPort: 80
           envFrom:
             - configMapRef:
-                name: nginx-env-vars   # Aponta para o ConfigMap correto
+                name: nginx-env-vars
           volumeMounts:
             - name: nginx-config
               mountPath: /etc/nginx/nginx.conf
@@ -39,7 +39,21 @@ spec:
               port: 80
             initialDelaySeconds: 5
             periodSeconds: 10
+
+        - name: prometheus
+          image: prom/prometheus:v2.52.0
+          ports:
+            - containerPort: 9090
+          args:
+            - "--storage.tsdb.path=/prometheus"
+            - "--web.listen-address=:9090"
+          volumeMounts:
+            - name: prometheus-data
+              mountPath: /prometheus
+
       volumes:
         - name: nginx-config
           configMap:
             name: nginx-custom-conf
+        - name: prometheus-data
+          emptyDir: {}
