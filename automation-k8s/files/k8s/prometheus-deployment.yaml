@@ -19,6 +19,7 @@ spec:
         - name: prometheus
           image: prom/prometheus:v2.52.0
           args:
+            - --config.file=/etc/prometheus/prometheus.yml
             - --storage.tsdb.path=/prometheus
             - --web.listen-address=:9090
           ports:
@@ -26,6 +27,12 @@ spec:
           volumeMounts:
             - name: prometheus-storage
               mountPath: /prometheus
+            - name: prometheus-config
+              mountPath: /etc/prometheus
+              readOnly: true
       volumes:
         - name: prometheus-storage
           emptyDir: {}
+        - name: prometheus-config
+          configMap:
+            name: prometheus-config
