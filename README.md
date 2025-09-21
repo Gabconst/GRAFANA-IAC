@@ -1,57 +1,179 @@
-# Projeto de Automação de Infraestrutura (PDI-DevOps)
+# Automation-K8s
 
-Este projeto demonstra a automação completa de infraestrutura usando **Terraform** para provisionar recursos e **Ansible** para configurá-los. O objetivo principal é seguir a metodologia de **Infraestrutura como Código (IaC)**, garantindo que o ambiente seja replicável e gerenciável.
+Este projeto automatiza a criação de uma infraestrutura em uma instância EC2, provisiona o Minikube e aplica um cluster Kubernetes com dois deployments principais: **NGINX** e **Prometheus**. Todo o processo é gerenciado por uma pipeline **GitHub Actions** e um **playbook Ansible**.
 
-## Estrutura de Diretórios
+---
 
-A estrutura abaixo mostra como os arquivos estão organizados para separar as responsabilidades de provisionamento e configuração.
+### Estrutura do Projeto
 
-## Pré-requisitos
+automation-k8s
+├── .vscode
+└── files/k8s
+├── configmap-nginx.yaml
+├── configmap-prometheus.yaml
+├── configmap.yaml
+├── deployment.yaml
+├── nginx.conf
+├── prometheus-deployment.yaml
+├── prometheus-service.yaml
+└── service.yaml
 
-Antes de começar, certifique-se de que os seguintes softwares estão instalados e configurados na sua máquina local:
+* **`configmap-nginx.yaml`**: ConfigMap personalizado do NGINX com variáveis de worker, logs e proxy reverso para o Prometheus.
+* **`configmap-prometheus.yaml`**: ConfigMap com a configuração do Prometheus (scrape interval, targets).
+* **`configmap.yaml`**: ConfigMap com variáveis de ambiente do NGINX.
+* **`deployment.yaml`**: Deployment do NGINX, que consome os ConfigMaps e expõe a porta configurada.
+* **`nginx.conf`**: Configuração do NGINX aplicada diretamente no container.
+* **`prometheus-deployment.yaml`**: Deployment do Prometheus, configurando porta, volumes e argumentos.
+* **`prometheus-service.yaml`**: Serviço **NodePort** para expor o Prometheus.
+* **`service.yaml`**: Serviço **ClusterIP** para expor o NGINX internamente no cluster.
 
-- **Terraform**: Versão `1.0` ou superior.
-- **Ansible**: Versão `2.9` ou superior.
-- **Chave SSH**: É crucial ter a chave `devops-pdi.pem` na pasta `lab/compute/terraform` e com as permissões corretas (`chmod 400 devops-pdi.pem`) para que o Ansible possa se conectar aos servidores.
+---
 
-## Guia de Execução
+### Diagrama de Arquitetura
 
-Siga a ordem dos passos para garantir o funcionamento correto do pipeline de automação.
+{} [ GitHub Actions Pipeline ]
+|
+v
+[ Terraform Provisiona EC2 ]
+|
+v
+[ Ansible Playbook Instala Minikube + Docker + NGINX ]
+|
+v
+[ Minikube Cluster (Kubernetes) ]
+|                     |
+v                     v
+[ Deployment NGINX ]   [ Deployment Prometheus ]
+|                     |
+-----------------------
+|
+Comunicação interna
+via proxy reverso
 
-### 1. Provisionamento da Infraestrutura com Terraform
+A. Sim, claro\! Aqui está todo o conteúdo do README, formatado e pronto para você copiar e colar:
 
-1.  Navegue até a pasta `compute`:
+```markdown
+# Automation-K8s
+
+Este projeto automatiza a criação de uma infraestrutura em uma instância EC2, provisiona o Minikube e aplica um cluster Kubernetes com dois deployments principais: **NGINX** e **Prometheus**. Todo o processo é gerenciado por uma pipeline **GitHub Actions** e um **playbook Ansible**.
+
+---
+
+### Estrutura do Projeto
+
+```
+
+automation-k8s
+├── .vscode
+└── files/k8s
+├── configmap-nginx.yaml
+├── configmap-prometheus.yaml
+├── configmap.yaml
+├── deployment.yaml
+├── nginx.conf
+├── prometheus-deployment.yaml
+├── prometheus-service.yaml
+└── service.yaml
+
+```
+
+* **`configmap-nginx.yaml`**: ConfigMap personalizado do NGINX com variáveis de worker, logs e proxy reverso para o Prometheus.
+* **`configmap-prometheus.yaml`**: ConfigMap com a configuração do Prometheus (scrape interval, targets).
+* **`configmap.yaml`**: ConfigMap com variáveis de ambiente do NGINX.
+* **`deployment.yaml`**: Deployment do NGINX, que consome os ConfigMaps e expõe a porta configurada.
+* **`nginx.conf`**: Configuração do NGINX aplicada diretamente no container.
+* **`prometheus-deployment.yaml`**: Deployment do Prometheus, configurando porta, volumes e argumentos.
+* **`prometheus-service.yaml`**: Serviço **NodePort** para expor o Prometheus.
+* **`service.yaml`**: Serviço **ClusterIP** para expor o NGINX internamente no cluster.
+
+---
+
+### Diagrama de Arquitetura
+
+```
+
+[ GitHub Actions Pipeline ]
+|
+v
+[ Terraform Provisiona EC2 ]
+|
+v
+[ Ansible Playbook Instala Minikube + Docker + NGINX ]
+|
+v
+[ Minikube Cluster (Kubernetes) ]
+|                     |
+v                     v
+[ Deployment NGINX ]   [ Deployment Prometheus ]
+|                     |
+\-----------------------
+|
+Comunicação interna
+via proxy reverso
+
+````
+
+---
+
+### Fluxo do Pipeline
+
+#### GitHub Actions
+1.  Faz checkout do repositório.
+2.  Clona o módulo Terraform e o repositório com o playbook.
+3.  Configura credenciais AWS.
+4.  Executa o Terraform para provisionar a instância EC2.
+5.  Configura o SSH para acessar a instância.
+6.  Instala o Ansible e suas dependências.
+7.  Executa o playbook Ansible para instalar o Minikube, Docker, NGINX e aplicar os manifests do Kubernetes.
+
+#### Ansible Playbook
+1.  Atualiza e instala os pacotes necessários.
+2.  Instala o Docker e adiciona o usuário ao grupo.
+3.  Instala e configura o Minikube.
+4.  Instala o Python e a biblioteca `kubernetes`.
+5.  Configura e aplica os arquivos YAML do Kubernetes (Deployments, Services, ConfigMaps).
+
+---
+
+### Comandos Úteis no Minikube
+
+* **Listar Pods**
     ```bash
-    cd compute
+    minikube kubectl get pods
     ```
-2.  Inicie o Terraform:
+
+* **Testar NGINX**
     ```bash
-    terraform init
+    minikube kubectl -- exec nginx-env-vars-<pod-id> -- curl localhost
     ```
-3.  Execute o `terraform apply` para criar a infraestrutura na AWS:
+
+* **Entrar no container do Prometheus**
     ```bash
-    terraform apply --auto-approve
+    minikube kubectl -- exec -it prometheus-<pod-id> -- /bin/sh
     ```
-    O IP público da sua instância será salvo no `terraform.tfstate`.
 
-#### Fase 2: Configuração com Ansible
-
-1.  Navegue até a pasta `automation`:
+* **Testar Prometheus dentro do container**
     ```bash
-    cd ../automation
+    wget -qO- http://localhost:9090
     ```
-2.  Execute o playbook do Ansible:
+
+* **Sair do container Prometheus**
     ```bash
-    ansible-playbook -i inventory.sh playbook.yml --ask-vault-pass
+    exit
     ```
-      * O inventário dinâmico (`-i inventory.sh`) encontrará o IP da instância automaticamente.
-      * O `--ask-vault-pass` pedirá a senha que você usou para criptografar o arquivo `grafana-servers.yml`.
 
------
+* **Testar conexão do NGINX com Prometheus (proxy reverso)**
+    ```bash
+    minikube kubectl exec -- nginx-env-vars-<pod-id> -- curl localhost/prometheus/
+    ```
+    *Substitua `<pod-id>` pelo identificador do pod retornado pelo comando `minikube kubectl get pods`.*
 
-### Gerenciamento de Variáveis e Senhas
+---
 
-  * **Terraform:** As variáveis de configuração estão no `terraform.tfvars`. Para alterá-las, basta editar este arquivo.
-  * **Ansible Vault:** Para gerenciar o arquivo criptografado do Ansible:
-      * **Ver conteúdo:** `ansible-vault view group_vars/grafana-servers.yml`
-      * **Editar:** `ansible-vault edit group_vars/grafana-servers.yml`
+### Observações
+
+* O NGINX retorna uma mensagem padrão "Olá, DevOps!" na raiz (`/`).
+* O Prometheus está exposto internamente na porta 9090 e é acessível via proxy reverso do NGINX.
+* O cluster Kubernetes é criado dentro da instância EC2 provisionada, utilizando o Minikube.
+* O projeto é totalmente automatizado via pipeline GitHub Actions, que provisiona a instância, configura o ambiente e aplica os manifests do Kubernetes.
+````
