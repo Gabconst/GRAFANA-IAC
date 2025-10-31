@@ -1,9 +1,4 @@
 apiVersion: v1
-kind: Namespace
-metadata:
-  name: argocd
----
-apiVersion: v1
 kind: ConfigMap
 metadata:
   name: argocd-cm
@@ -14,7 +9,7 @@ data:
   url: ""
   application.instanceLabelKey: argocd.argoproj.io/instance
   repositories: |
-    - url: https://github.com/Gabconst/GRAFANA-IAC/tree/main/automation-k8s/files/k8s
+    - url: https://github.com/Gabconst/GRAFANA-IAC.git
       name: default-repo
       type: git
       insecure: false
