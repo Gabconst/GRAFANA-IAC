@@ -88,7 +88,7 @@ spec:
     spec:
       containers:
       - name: dex
-        image: quay.io/dexidp/dex:v2.43.1
+        image: ghcr.io/dexidp/dex:v2.41.1
         ports:
         - containerPort: 5556
 ---
