@@ -88,7 +88,7 @@ spec:
     spec:
       containers:
       - name: dex
-        image: quay.io/dexidp/dex:v2.36.0
+        image: quay.io/dexidp/dex:v2.37.0
         ports:
         - containerPort: 5556
 ---
@@ -98,7 +98,7 @@ metadata:
   name: argocd-redis
   namespace: argocd
 spec:
-  replicas: 1
+  replicas: 2
   selector:
     matchLabels:
       app: argocd-redis
