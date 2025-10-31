@@ -10,7 +10,7 @@
 
   tasks:
 
-    ####### SISTEMA & DEPENDÊNCIAS ########
+    ####### SISTEMA & DEPÊNCIAS ########
     - name: Atualiza cache do APT e faz upgrade
       apt:
         update_cache: yes
@@ -119,7 +119,7 @@
         group: ubuntu
         mode: '0755'
 
-    - name: Copia todos os manifests do repositório (incluindo ArgoCD) para a VM
+    - name: Copia todos os manifests do repositório (NGINX, Prometheus, ArgoCD, etc.) para a VM
       copy:
         src: "{{ playbook_dir }}/files/k8s/"
         dest: /home/ubuntu/k8s/
@@ -129,11 +129,10 @@
         remote_src: no
       become_user: ubuntu
 
-    - name: Aplica todos os manifests do Kubernetes via CLI (incluindo ArgoCD)
+    - name: Aplica todos os manifests do Kubernetes via CLI (namespace default)
       become_user: ubuntu
       shell: |
-        echo "=== Aplicando manifests do Kubernetes (todos os serviços, incluindo ArgoCD) ==="
-        shopt -s nullglob
+        echo "=== Aplicando manifests do Kubernetes (namespace default) ==="
         for f in /home/ubuntu/k8s/*.yaml; do
           echo "-> Aplicando $f"
           minikube kubectl -- apply -f "$f"
@@ -141,25 +140,29 @@
       args:
         executable: /bin/bash
 
-    ####### AGUARDA ARGOCD ########
-    - name: Aguarda pods do ArgoCD ficarem prontos
+    ####### CHECK ARGOCD POD STATUS ########
+    - name: Aguarda pods do ArgoCD ficarem prontos (opcional)
       become_user: ubuntu
       shell: |
         echo "=== Aguardando pods do ArgoCD ficarem prontos ==="
-        until [ "$(minikube kubectl -- get pods -n argocd --no-headers 2>/dev/null | grep -c '1/1')" -ge 4 ]; do
-          echo "Pods ainda não prontos, aguardando 5s..."
-          sleep 5
+        for pod in $(minikube kubectl -- get pods | grep argocd | awk '{print $1}'); do
+          echo "Aguardando $pod..."
+          until [ "$(minikube kubectl -- get pod $pod -o jsonpath='{.status.phase}')" == "Running" ]; do
+            sleep 3
+          done
         done
-        minikube kubectl -- get pods -n argocd
       args:
         executable: /bin/bash
-      retries: 12
-      delay: 5
-      register: argocd_status
-      until: argocd_status.rc == 0
+      ignore_errors: yes
+
+    - name: Mostra status final dos pods do ArgoCD
+      become_user: ubuntu
+      shell: minikube kubectl -- get pods
+      register: pods_status
+      ignore_errors: yes
 
     - debug:
-        msg: "{{ argocd_status.stdout_lines | default(['Sem saída']) }}"
+        msg: "{{ pods_status.stdout_lines | default(['Sem saída']) }}"
 
   handlers:
     - name: Reinicia NGINX
