@@ -1,117 +1,173 @@
 ---
-- name: Provisiona cluster Minikube com Prometheus, Nginx e ArgoCD
-  hosts: all
+- name: Setup completo de servidor com Minikube + NGINX + K8s + ArgoCD
+  hosts: grafana-servers
   become: true
-  environment:
-    DEBIAN_FRONTEND: noninteractive
+
+  vars:
+    docker_packages:
+      - docker.io
+    ansible_ssh_common_args: '-o ServerAliveInterval=30 -o ServerAliveCountMax=120'
 
   tasks:
-    # ----------------------------------------------------------
-    # 1. Atualiza pacotes do sistema
-    # ----------------------------------------------------------
-    - name: Atualiza cache do apt
+
+    ####### SISTEMA & DEPENDÊNCIAS ########
+    - name: Atualiza cache do APT e faz upgrade
       apt:
         update_cache: yes
-      retries: 3
-      delay: 10
-      register: apt_update
-      until: apt_update is succeeded
-      timeout: 180
+        upgrade: dist
 
-    # ----------------------------------------------------------
-    # 2. Instala pacotes base e Docker
-    # ----------------------------------------------------------
-    - name: Instala pacotes necessários
+    - name: Instala dependências básicas
       apt:
         name:
+          - curl
+          - wget
+          - git
           - apt-transport-https
           - ca-certificates
-          - curl
-          - gnupg
-          - lsb-release
-          - docker.io
+          - software-properties-common
+          - python3-pip
+          - python3-venv
         state: present
         update_cache: yes
-      retries: 3
-      delay: 10
-      register: docker_install
-      until: docker_install is succeeded
-      timeout: 300
 
-    - name: Habilita e inicia o Docker
+    ####### DOCKER ########
+    - name: Instala Docker
+      apt:
+        name: "{{ docker_packages }}"
+        state: present
+        update_cache: yes
+
+    - name: Garante que o grupo docker existe
+      group:
+        name: docker
+        state: present
+
+    - name: Adiciona usuário ubuntu ao grupo docker
+      user:
+        name: ubuntu
+        groups: docker
+        append: yes
+
+    - name: Reinicia o serviço Docker
       systemd:
         name: docker
+        state: restarted
         enabled: true
-        state: started
 
-    # ----------------------------------------------------------
-    # 3. Instala kubectl
-    # ----------------------------------------------------------
-    - name: Instala kubectl
-      shell: |
-        curl -Lo /usr/local/bin/kubectl https://storage.googleapis.com/kubernetes-release/release/v1.30.0/bin/linux/amd64/kubectl
-        chmod +x /usr/local/bin/kubectl
-      args:
-        creates: /usr/local/bin/kubectl
+    ####### MINIKUBE ########
+    - name: Baixa binário do Minikube
+      get_url:
+        url: "https://github.com/kubernetes/minikube/releases/latest/download/minikube-linux-amd64"
+        dest: /tmp/minikube-linux-amd64
+        mode: '0755'
 
-    # ----------------------------------------------------------
-    # 4. Instala Minikube
-    # ----------------------------------------------------------
-    - name: Instala Minikube
-      shell: |
-        curl -Lo /usr/local/bin/minikube https://storage.googleapis.com/minikube/releases/latest/minikube-linux-amd64
-        chmod +x /usr/local/bin/minikube
+    - name: Move binário para /usr/local/bin
+      command: mv /tmp/minikube-linux-amd64 /usr/local/bin/minikube
       args:
         creates: /usr/local/bin/minikube
 
-    # ----------------------------------------------------------
-    # 5. Inicia Minikube
-    # ----------------------------------------------------------
+    - name: Garante permissão de execução no Minikube
+      file:
+        path: /usr/local/bin/minikube
+        mode: '0755'
+        owner: root
+        group: root
+
+    - name: Cria alias kubectl no .bashrc do usuário ubuntu
+      become_user: ubuntu
+      lineinfile:
+        path: /home/ubuntu/.bashrc
+        line: 'alias kubectl="minikube kubectl --"'
+        insertafter: EOF
+
+    - name: Verifica se Minikube está ativo
+      become_user: ubuntu
+      shell: 'minikube status --format={{"{{.Host}}"}}'
+      register: minikube_status
+      ignore_errors: yes
+
     - name: Inicia cluster Minikube
       become_user: ubuntu
+      environment:
+        DOCKER_HOST: unix:///var/run/docker.sock
       shell: |
+        newgrp docker <<EONG
         minikube start --driver=docker --force
+        EONG
       args:
         chdir: /home/ubuntu
       register: minikube_start
-      changed_when: "'Done!' in minikube_start.stdout or 'Running' in minikube_start.stdout"
       timeout: 600
+      changed_when: "'Done!' in minikube_start.stdout or 'Running' in minikube_start.stdout"
 
-    # ----------------------------------------------------------
-    # 6. Aplica manifests do Prometheus e Nginx
-    # ----------------------------------------------------------
-    - name: Aplica manifests do Prometheus e Nginx
+    ####### PYTHON + K8S ########
+    - name: Instala biblioteca kubernetes do Python
+      pip:
+        name: kubernetes
+        executable: pip3
+        extra_args: --break-system-packages
+
+    ####### NGINX ########
+    - name: Instala NGINX
+      apt:
+        name: nginx
+        state: present
+        update_cache: yes
+
+    - name: Copia arquivo nginx.conf
+      copy:
+        src: "{{ playbook_dir }}/files/k8s/nginx.conf"
+        dest: /etc/nginx/nginx.conf
+        owner: root
+        group: root
+        mode: '0644'
+      notify: Reinicia NGINX
+
+    ####### KUBERNETES MANIFESTS ########
+    - name: Cria pasta /home/ubuntu/k8s na VM
+      file:
+        path: /home/ubuntu/k8s
+        state: directory
+        owner: ubuntu
+        group: ubuntu
+        mode: '0755'
+
+    - name: Copia todos os manifests do repositório (incluindo ArgoCD) para a VM
+      copy:
+        src: "{{ playbook_dir }}/files/k8s/"
+        dest: /home/ubuntu/k8s/
+        owner: ubuntu
+        group: ubuntu
+        mode: '0644'
+        remote_src: no
+      become_user: ubuntu
+
+    - name: Aplica todos os manifests do Kubernetes via CLI no namespace default
       become_user: ubuntu
       shell: |
-        minikube kubectl -- apply -f /home/ubuntu/k8s/prometheus.yaml
-        minikube kubectl -- apply -f /home/ubuntu/k8s/nginx.yaml
+        echo "=== Aplicando manifests do Kubernetes (todos os serviços, incluindo ArgoCD) ==="
+        for f in /home/ubuntu/k8s/*.yaml; do
+          echo "-> Aplicando $f"
+          minikube kubectl -- apply -f "$f" -n default
+        done
       args:
-        chdir: /home/ubuntu
-      timeout: 300
+        executable: /bin/bash
 
-    # ----------------------------------------------------------
-    # 7. Aplica manifests do ArgoCD (no namespace default)
-    # ----------------------------------------------------------
-    - name: Aplica ConfigMap e Deployments do ArgoCD
+    ####### STATUS ########
+    - name: Verifica status dos pods
       become_user: ubuntu
       shell: |
-        sed -i 's/namespace: argocd/namespace: default/g' /home/ubuntu/k8s/argocd-deployment.yaml
-        sed -i 's/namespace: argocd/namespace: default/g' /home/ubuntu/k8s/argocd-service.yaml
-        sed -i 's/namespace: argocd/namespace: default/g' /home/ubuntu/k8s/argocd-configmap.yaml
-        minikube kubectl -- apply -f /home/ubuntu/k8s/argocd-configmap.yaml
-        minikube kubectl -- apply -f /home/ubuntu/k8s/argocd-deployment.yaml
-        minikube kubectl -- apply -f /home/ubuntu/k8s/argocd-service.yaml
-      timeout: 300
+        echo "=== Verificando status dos pods no namespace default ==="
+        minikube kubectl -- get pods -n default || echo "Namespace default ainda não disponível"
+      register: pods_status
+      ignore_errors: yes
 
-    # ----------------------------------------------------------
-    # 8. Verifica status dos pods
-    # ----------------------------------------------------------
-    - name: Mostra pods ativos
-      become_user: ubuntu
-      shell: minikube kubectl -- get pods -A
-      register: pods
-      changed_when: false
+    - debug:
+        msg: "{{ pods_status.stdout_lines | default(['Sem saída do comando']) }}"
 
-    - name: Exibe resultado
-      debug:
-        var: pods.stdout
+  handlers:
+    - name: Reinicia NGINX
+      service:
+        name: nginx
+        state: restarted
+        enabled: yes
