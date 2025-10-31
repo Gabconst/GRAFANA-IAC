@@ -30,6 +30,13 @@ spec:
             - name: prometheus-config
               mountPath: /etc/prometheus
               readOnly: true
+          resources:
+            limits:
+              memory: "128Mi"
+              cpu: "500m"
+            requests:
+              memory: "64Mi"
+              cpu: "250m"
       volumes:
         - name: prometheus-storage
           emptyDir: {}

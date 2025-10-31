@@ -1,5 +1,5 @@
 ---
-- name: Setup completo de servidor com Minikube + NGINX + K8s
+- name: Setup completo de servidor com Minikube + NGINX + K8s + ArgoCD
   hosts: grafana-servers
   become: true
 
@@ -109,7 +109,7 @@
         mode: '0644'
       notify: Reinicia NGINX
 
-    ####### KUBERNETES MANIFESTS ########
+    ####### KUBERNETES MANIFESTS (TODOS OS SERVIÇOS, INCLUINDO ARGOCD) ########
     - name: Cria pasta /home/ubuntu/k8s na VM
       file:
         path: /home/ubuntu/k8s
@@ -118,7 +118,7 @@
         group: ubuntu
         mode: '0755'
 
-    - name: Copia manifests do repositório para a VM
+    - name: Copia todos os manifests do repositório (incluindo ArgoCD) para a VM
       copy:
         src: "{{ playbook_dir }}/files/k8s/"
         dest: /home/ubuntu/k8s/
@@ -128,14 +128,27 @@
         remote_src: no
       become_user: ubuntu
 
-    - name: Aplica todos os manifests do Kubernetes via CLI
+    - name: Aplica todos os manifests do Kubernetes via CLI (incluindo ArgoCD)
       become_user: ubuntu
       shell: |
+        echo "=== Aplicando manifests do Kubernetes (todos os serviços, incluindo ArgoCD) ==="
         for f in /home/ubuntu/k8s/*.yaml; do
+          echo "-> Aplicando $f"
           minikube kubectl -- apply -f "$f"
         done
       args:
         executable: /bin/bash
+
+    - name: Aguarda pods do ArgoCD ficarem prontos (opcional)
+      become_user: ubuntu
+      shell: |
+        minikube kubectl -- -n argocd wait --for=condition=available --timeout=300s deployment --all || true
+      args:
+        executable: /bin/bash
+      register: argocd_wait
+      retries: 3
+      delay: 10
+      until: argocd_wait.rc == 0
 
   handlers:
     - name: Reinicia NGINX
