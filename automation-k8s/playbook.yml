@@ -6,6 +6,7 @@
   vars:
     docker_packages:
       - docker.io
+    ansible_ssh_common_args: '-o ServerAliveInterval=30 -o ServerAliveCountMax=120'
 
   tasks:
 
@@ -109,7 +110,7 @@
         mode: '0644'
       notify: Reinicia NGINX
 
-    ####### KUBERNETES MANIFESTS (TODOS OS SERVIÇOS, INCLUINDO ARGOCD) ########
+    ####### KUBERNETES MANIFESTS ########
     - name: Cria pasta /home/ubuntu/k8s na VM
       file:
         path: /home/ubuntu/k8s
@@ -139,16 +140,17 @@
       args:
         executable: /bin/bash
 
-    - name: Aguarda pods do ArgoCD ficarem prontos (opcional)
+    ####### ARGOCD STATUS ########
+    - name: Verifica se pods do ArgoCD estão rodando
       become_user: ubuntu
       shell: |
-        minikube kubectl -- -n argocd wait --for=condition=available --timeout=300s deployment --all || true
-      args:
-        executable: /bin/bash
-      register: argocd_wait
-      retries: 3
-      delay: 10
-      until: argocd_wait.rc == 0
+        echo "=== Verificando status dos pods do ArgoCD ==="
+        minikube kubectl -- get pods -n argocd || echo "Namespace 'argocd' ainda não disponível"
+      register: argocd_pods
+      ignore_errors: yes
+
+    - debug:
+        msg: "{{ argocd_pods.stdout_lines | default(['Sem saída do comando']) }}"
 
   handlers:
     - name: Reinicia NGINX
