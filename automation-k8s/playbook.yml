@@ -133,6 +133,7 @@
       become_user: ubuntu
       shell: |
         echo "=== Aplicando manifests do Kubernetes (todos os serviços, incluindo ArgoCD) ==="
+        shopt -s nullglob
         for f in /home/ubuntu/k8s/*.yaml; do
           echo "-> Aplicando $f"
           minikube kubectl -- apply -f "$f"
@@ -140,17 +141,25 @@
       args:
         executable: /bin/bash
 
-    ####### ARGOCD STATUS ########
-    - name: Verifica se pods do ArgoCD estão rodando
+    ####### AGUARDA ARGOCD ########
+    - name: Aguarda pods do ArgoCD ficarem prontos
       become_user: ubuntu
       shell: |
-        echo "=== Verificando status dos pods do ArgoCD ==="
-        minikube kubectl -- get pods -n argocd || echo "Namespace 'argocd' ainda não disponível"
-      register: argocd_pods
-      ignore_errors: yes
+        echo "=== Aguardando pods do ArgoCD ficarem prontos ==="
+        until [ "$(minikube kubectl -- get pods -n argocd --no-headers 2>/dev/null | grep -c '1/1')" -ge 4 ]; do
+          echo "Pods ainda não prontos, aguardando 5s..."
+          sleep 5
+        done
+        minikube kubectl -- get pods -n argocd
+      args:
+        executable: /bin/bash
+      retries: 12
+      delay: 5
+      register: argocd_status
+      until: argocd_status.rc == 0
 
     - debug:
-        msg: "{{ argocd_pods.stdout_lines | default(['Sem saída do comando']) }}"
+        msg: "{{ argocd_status.stdout_lines | default(['Sem saída']) }}"
 
   handlers:
     - name: Reinicia NGINX
