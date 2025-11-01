@@ -47,6 +47,7 @@ spec:
       containers:
       - name: argocd-repo-server
         image: quay.io/argoproj/argocd:v2.11.3
+        command: ["argocd-repo-server"]
         ports:
         - containerPort: 8081
 ---
