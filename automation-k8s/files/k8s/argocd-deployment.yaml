@@ -13,6 +13,7 @@ spec:
       labels:
         app: argocd-server
     spec:
+      serviceAccountName: argocd-sa
       containers:
       - name: argocd-server
         image: quay.io/argoproj/argocd:v2.11.3
@@ -20,8 +21,7 @@ spec:
         ports:
         - containerPort: 8080
         command: ["argocd-server"]
-        args:
-          - --insecure
+        args: ["--insecure"]
         volumeMounts:
         - name: static-files
           mountPath: /shared
@@ -44,6 +44,7 @@ spec:
       labels:
         app: argocd-repo-server
     spec:
+      serviceAccountName: argocd-sa
       containers:
       - name: argocd-repo-server
         image: quay.io/argoproj/argocd:v2.11.3
@@ -66,6 +67,7 @@ spec:
       labels:
         app: argocd-application-controller
     spec:
+      serviceAccountName: argocd-sa
       containers:
       - name: argocd-application-controller
         image: quay.io/argoproj/argocd:v2.11.3
@@ -87,6 +89,7 @@ spec:
       labels:
         app: argocd-dex-server
     spec:
+      serviceAccountName: argocd-sa
       containers:
       - name: dex
         image: ghcr.io/dexidp/dex:v2.41.1
@@ -108,6 +111,7 @@ spec:
       labels:
         app: argocd-redis
     spec:
+      serviceAccountName: argocd-sa
       containers:
       - name: redis
         image: redis:7.2

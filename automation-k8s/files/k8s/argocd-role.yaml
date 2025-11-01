@@ -1,0 +1,9 @@
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: argocd-role
+  namespace: default
+rules:
+  - apiGroups: [""]
+    resources: ["secrets", "configmaps", "pods", "services", "endpoints"]
+    verbs: ["get", "list", "watch"]

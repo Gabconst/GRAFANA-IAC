@@ -132,7 +132,7 @@
         group: ubuntu
         mode: '0755'
 
-    - name: Copia todos os manifests do repositório (incluindo ArgoCD) para a VM
+    - name: Copia todos os manifests do repositório (incluindo ArgoCD e RBAC) para a VM
       copy:
         src: "{{ playbook_dir }}/files/k8s/"
         dest: /home/ubuntu/k8s/
@@ -142,13 +142,29 @@
         remote_src: no
       become_user: ubuntu
 
-    - name: Aplica todos os manifests do Kubernetes via CLI no namespace default
+    - name: Aplica manifests do Kubernetes (aplicação e ArgoCD)
       become_user: ubuntu
       shell: |
-        echo "=== Aplicando manifests do Kubernetes (todos os serviços, incluindo ArgoCD) ==="
-        for f in /home/ubuntu/k8s/*.yaml; do
-          echo "-> Aplicando $f"
-          minikube kubectl -- apply -f "$f" -n default
+        echo "=== Aplicando manifests do Kubernetes ==="
+
+        # Aplica primeiro os manifests da aplicação
+        for f in /home/ubuntu/k8s/deployment.yaml /home/ubuntu/k8s/service.yaml /home/ubuntu/k8s/ingress.yaml; do
+          if [ -f "$f" ]; then
+            echo "-> Aplicando $f"
+            minikube kubectl -- apply -f "$f" -n default
+          fi
+        done
+
+        # Depois aplica os manifests do ArgoCD e RBAC
+        for f in \
+          /home/ubuntu/k8s/argocd-serviceaccount.yaml \
+          /home/ubuntu/k8s/argocd-role.yaml \
+          /home/ubuntu/k8s/argocd-rolebinding.yaml \
+          /home/ubuntu/k8s/argocd.yaml; do
+          if [ -f "$f" ]; then
+            echo "-> Aplicando $f"
+            minikube kubectl -- apply -f "$f" -n default
+          fi
         done
       args:
         executable: /bin/bash
